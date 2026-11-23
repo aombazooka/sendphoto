@@ -1,0 +1,19 @@
+Options -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Never serve the git folder
+  RewriteRule (^|/)\.git(/|$) - [F,L]
+  # Client share links: /s/{token}
+  RewriteRule ^s/([A-Za-z0-9]+)/?$ share.php?t=$1 [L,QSA]
+</IfModule>
+
+<FilesMatch "^(config(\.example)?\.php|.*\.md|\.git.*|cron\.php)$">
+  Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "same-origin"
+</IfModule>

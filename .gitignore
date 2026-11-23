@@ -1,0 +1,17 @@
+# Local settings (database password)
+/config.php
+
+# Runtime data: payment slips, image cache, schema flags
+/data/
+
+# Uploaded covers and logos
+/uploads/*
+!/uploads/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.bak
