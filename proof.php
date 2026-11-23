@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_out(['ok' => false], 405);
 
 $album = find_album_by_token((string) ($_POST['t'] ?? ''));
 if (!$album || !album_is_public($album)) json_out(['ok' => false, 'error' => 'ลิงก์นี้หมดอายุหรือถูกปิดแล้ว'], 404);
-if (!(int) $album['proof_enabled']) json_out(['ok' => false, 'error' => 'แกลเลอรีนี้ไม่ได้เปิดระบบคัดรูป'], 403);
+if (!(int) $album['proof_enabled'] || !album_has_feature($album, 'proof')) json_out(['ok' => false, 'error' => 'แกลเลอรีนี้ไม่ได้เปิดระบบคัดรูป'], 403);
 
 $key = (string) ($_POST['key'] ?? '');
 if (!preg_match('/^[a-f0-9]{32}$/', $key)) json_out(['ok' => false, 'error' => 'ข้อมูลไม่ถูกต้อง'], 400);

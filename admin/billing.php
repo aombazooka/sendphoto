@@ -86,6 +86,7 @@ admin_header('แพ็กเกจ', 'billing');
             <span class="plan__name"><?= e($p['name']) ?></span>
             <span class="plan__price">฿<?= e(money($p['price'])) ?> <small>/ <?= e(plan_period_label($p)) ?></small></span>
             <span class="plan__desc"><?= e($p['description'] ?: $p['days'] . ' วัน') ?><?= (int) $p['max_albums'] ? ' · สูงสุด ' . (int) $p['max_albums'] . ' แกลเลอรี' : ' · แกลเลอรีไม่จำกัด' ?></span>
+            <span class="plan__feats"><?php foreach (FEATURES as $fk => [$fi, $fn]): $on = in_array($fk, parse_features($p['features'] ?? ''), true); ?><span class="<?= $on ? 'is-on' : '' ?>"><?= $on ? '✓' : '—' ?> <?= e($fn) ?></span><?php endforeach; ?></span>
           </span>
         </label>
       <?php endforeach; ?>

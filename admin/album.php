@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'is_active'      => isset($_POST['is_active']) ? 1 : 0,
         'allow_download' => isset($_POST['allow_download']) ? 1 : 0,
         'cover_style'    => ($_POST['cover_style'] ?? '') === 'full' ? 'full' : 'editorial',
-        'proof_enabled'  => isset($_POST['proof_enabled']) ? 1 : 0,
+        'proof_enabled'  => isset($_POST['proof_enabled']) && has_feature($me, 'proof') ? 1 : 0,
         'proof_limit'    => max(0, min(100000, (int) ($_POST['proof_limit'] ?? 0))),
         'proof_extra_price' => max(0, min(1000000, round((float) ($_POST['proof_extra_price'] ?? 0), 2))),
         'proof_deadline' => trim((string) ($_POST['proof_deadline'] ?? '')) ?: null,
@@ -324,8 +324,11 @@ admin_header($isNew ? 'สร้างลิงก์แกลเลอรี' :
     <section class="fset <?= (int) $form['proof_enabled'] ? 'is-on' : '' ?>" id="proof-set">
       <div class="fset__hd">
         <span class="field__lbl">♡ ระบบคัดรูป <em>ลูกค้าเลือกภาพสำหรับรีทัช / ทำอัลบั้ม แล้วส่งรายการให้คุณ</em></span>
+        <?php if (has_feature($me, 'proof')): ?>
         <label class="switch"><input type="checkbox" name="proof_enabled" id="f-proof" <?= (int) $form['proof_enabled'] ? 'checked' : '' ?>><i></i> เปิดใช้</label>
+        <?php endif; ?>
       </div>
+      <?php if (!has_feature($me, 'proof')): ?><div class="fset__lock"><?= feature_locked_note('proof') ?></div><?php endif; ?>
       <div class="fset__body">
         <div class="row row--3">
           <label class="field">

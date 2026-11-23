@@ -641,7 +641,7 @@ body.lb-open { overflow: hidden; }
 .slip__rej { display: flex; gap: 8px; flex: 1; min-width: 260px; }
 .slip__rej input { min-height: 34px; padding: 6px 12px; font-size: 13px; }
 
-.plan-edit { display: grid; grid-template-columns: 1.4fr .6fr .8fr .8fr 2fr .5fr .4fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.plan-edit { display: grid; grid-template-columns: 1.4fr .6fr .8fr .8fr auto 2fr .5fr .4fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .plan-edit:last-of-type { border-bottom: 0; }
 .plan-edit input[type=text], .plan-edit input[type=number] { min-height: 38px; padding: 7px 10px; font-size: 13.5px; }
 .plan-edit--hd { font-size: 12px; color: var(--muted); padding-top: 14px; }
@@ -846,3 +846,17 @@ a.ntoast:hover { color: var(--ink); border-color: var(--brown); }
 .secnav a:hover, .secnav a.is-on { background: var(--brown); border-color: var(--brown); color: #fbf6ef; }
 .secnav a.is-on span, .secnav a:hover span { color: rgba(251, 246, 239, .75); }
 .a-tile__sec { font-weight: 500; color: var(--brown); }
+
+/* plan features */
+.featchk { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.featchk--row { gap: 4px; }
+.featchk--row label { cursor: pointer; }
+.featchk--row input { position: absolute; opacity: 0; pointer-events: none; }
+.featchk--row span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); color: var(--soft); font-size: 14px; }
+.featchk--row input:checked + span { background: var(--brown); border-color: var(--brown); color: #fff; }
+.featchk--row input:focus-visible + span { outline: 2px solid var(--gold); }
+.plan__feats { display: grid; gap: 2px; margin-top: 8px; font-size: 12.5px; color: var(--soft); }
+.plan__feats .is-on { color: var(--ok); }
+.locked { margin: 0; padding: 10px 14px; border-radius: 10px; background: var(--sand); color: var(--brown); font-size: 13px; }
+.locked a { font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+.fset__lock { padding: 0 16px 14px; }

@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         set_setting('trial_days', $num('trial_days', 0, 365));
         set_setting('trial_max_albums', $num('trial_max_albums', 0, 100000));
         set_setting('grace_days', $num('grace_days', 0, 365));
+        set_setting('trial_features', implode(',', parse_features(implode(',', array_keys((array) ($_POST['trial_feat'] ?? []))))));
         set_setting('google_api_key', trim((string) ($_POST['google_api_key'] ?? '')));
         flash('บันทึกการตั้งค่าระบบแล้ว');
         redirect(url('admin/platform.php'));
@@ -52,7 +53,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name  = mb_substr(trim((string) ($_POST['name'] ?? '')), 0, 120);
         $days  = (int) ($_POST['days'] ?? 0);
         $price = round((float) ($_POST['price'] ?? 0), 2);
-        $vals  = [$name, $days, $price, max(0, (int) ($_POST['max_albums'] ?? 0)),
+        $feats = implode(',', parse_features(implode(',', array_keys((array) ($_POST['feat'] ?? [])))));
+        $vals  = [$name, $days, $price, max(0, (int) ($_POST['max_albums'] ?? 0)), $feats,
                   mb_substr(trim((string) ($_POST['description'] ?? '')), 0, 255), !empty($_POST['is_active']) ? 1 : 0, (int) ($_POST['sort'] ?? 0)];
         if (!empty($_POST['delete']) && $pid) {
             db()->prepare('UPDATE users SET plan_id = NULL WHERE plan_id = ?')->execute([$pid]);
@@ -65,9 +67,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         elseif ($price <= 0) $errors[] = 'ราคาต้องมากกว่า 0';
         else {
             if ($pid) {
-                db()->prepare('UPDATE plans SET name=?, days=?, price=?, max_albums=?, description=?, is_active=?, sort=? WHERE id=?')->execute([...$vals, $pid]);
+                db()->prepare('UPDATE plans SET name=?, days=?, price=?, max_albums=?, features=?, description=?, is_active=?, sort=? WHERE id=?')->execute([...$vals, $pid]);
             } else {
-                db()->prepare('INSERT INTO plans(name, days, price, max_albums, description, is_active, sort) VALUES(?,?,?,?,?,?,?)')->execute($vals);
+                db()->prepare('INSERT INTO plans(name, days, price, max_albums, features, description, is_active, sort) VALUES(?,?,?,?,?,?,?,?)')->execute($vals);
             }
             flash($pid ? 'บันทึกแพ็กเกจแล้ว' : 'เพิ่มแพ็กเกจแล้ว');
             redirect(url('admin/platform.php#plans'));
@@ -106,6 +108,13 @@ admin_header('ตั้งค่าระบบ', 'platform');
       <label class="field"><span class="field__lbl">ทดลองใช้ฟรี (วัน)</span><input type="number" name="trial_days" min="0" max="365" value="<?= e(setting('trial_days', '7')) ?>"></label>
       <label class="field"><span class="field__lbl">แกลเลอรีสูงสุดช่วงทดลอง <em>0 = ไม่จำกัด</em></span><input type="number" name="trial_max_albums" min="0" value="<?= e(setting('trial_max_albums', '0')) ?>"></label>
     </div>
+    <div class="field"><span class="field__lbl">ฟีเจอร์ช่วงทดลองใช้</span>
+      <div class="featchk">
+        <?php $tf = parse_features(setting('trial_features', 'proof,sell,face')); foreach (FEATURES as $fk => [$fi, $fn]): ?>
+          <label class="check-inline"><input type="checkbox" name="trial_feat[<?= $fk ?>]" value="1" <?= in_array($fk, $tf, true) ? 'checked' : '' ?>> <?= e($fi . ' ' . $fn) ?></label>
+        <?php endforeach; ?>
+      </div>
+    </div>
     <label class="field"><span class="field__lbl">ลิงก์ลูกค้ายังเปิดได้หลังสมาชิกหมดอายุ (วัน)</span>
       <input type="number" name="grace_days" min="0" max="365" value="<?= e(setting('grace_days', '7')) ?>">
       <small class="hint">ระหว่างนี้ร้านสร้าง/แก้ไขแกลเลอรีไม่ได้ แต่ลูกค้าของร้านยังโหลดภาพได้ · 0 = ปิดลิงก์ทันทีที่หมดอายุ</small>
@@ -135,8 +144,8 @@ admin_header('ตั้งค่าระบบ', 'platform');
 
 <section class="panel" id="plans">
   <header class="panel__hd"><p class="step">Plans</p><h2 class="panel__title">แพ็กเกจสมาชิก</h2>
-    <p class="hint">ปิด “แสดง” เพื่อซ่อนแพ็กเกจจากหน้าสมัคร โดยสมาชิกเดิมยังใช้ต่อได้ · แกลเลอรีสูงสุด 0 = ไม่จำกัด</p></header>
-  <div class="plan-edit plan-edit--hd"><span>ชื่อ</span><span>วัน</span><span>ราคา (บาท)</span><span>แกลเลอรีสูงสุด</span><span>คำอธิบาย</span><span>ลำดับ</span><span>แสดง</span><span></span></div>
+    <p class="hint">ปิด “แสดง” เพื่อซ่อนแพ็กเกจจากหน้าสมัคร โดยสมาชิกเดิมยังใช้ต่อได้ · แกลเลอรีสูงสุด 0 = ไม่จำกัด · ฟีเจอร์: ♡ คัดรูป · ฿ ลายน้ำ+ขายรูป · ☺ ค้นหาด้วยใบหน้า</p></header>
+  <div class="plan-edit plan-edit--hd"><span>ชื่อ</span><span>วัน</span><span>ราคา (บาท)</span><span>แกลเลอรีสูงสุด</span><span>ฟีเจอร์</span><span>คำอธิบาย</span><span>ลำดับ</span><span>แสดง</span><span></span></div>
   <?php foreach ([...$plans, null] as $p): ?>
     <form method="post" class="plan-edit">
       <?= csrf_field() ?><input type="hidden" name="section" value="plan"><input type="hidden" name="id" value="<?= (int) ($p['id'] ?? 0) ?>">
@@ -144,6 +153,7 @@ admin_header('ตั้งค่าระบบ', 'platform');
       <input type="number" name="days" min="1" max="3650" value="<?= e((string) ($p['days'] ?? '')) ?>" placeholder="180" required aria-label="จำนวนวัน">
       <input type="number" name="price" min="1" step="0.01" value="<?= e($p ? (string) (float) $p['price'] : '') ?>" placeholder="1590" required aria-label="ราคา">
       <input type="number" name="max_albums" min="0" value="<?= e((string) ($p['max_albums'] ?? '0')) ?>" aria-label="แกลเลอรีสูงสุด">
+      <span class="featchk featchk--row"><?php $pf = $p ? parse_features($p['features'] ?? '') : array_keys(FEATURES); foreach (FEATURES as $fk => [$fi, $fn]): ?><label title="<?= e($fn) ?>"><input type="checkbox" name="feat[<?= $fk ?>]" value="1" <?= in_array($fk, $pf, true) ? 'checked' : '' ?>><span><?= e($fi) ?></span></label><?php endforeach; ?></span>
       <input type="text" name="description" value="<?= e($p['description'] ?? '') ?>" maxlength="255" aria-label="คำอธิบาย">
       <input type="number" name="sort" value="<?= e((string) ($p['sort'] ?? count($plans) + 1)) ?>" aria-label="ลำดับ">
       <label class="check-inline"><input type="checkbox" name="is_active" value="1" <?= !$p || (int) $p['is_active'] ? 'checked' : '' ?>><span class="sr-only">แสดง</span></label>

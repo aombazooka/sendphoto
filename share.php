@@ -69,7 +69,7 @@ $logo     = album_logo_url($album);
 $allowDl  = (int) $album['allow_download'] === 1;
 $contact  = user_setting($ownerId, 'contact', '');
 $style    = ($album['cover_style'] ?? 'editorial') === 'full' ? 'full' : 'editorial';
-$proofOn  = (int) ($album['proof_enabled'] ?? 0) === 1 && $count > 0;
+$proofOn  = (int) ($album['proof_enabled'] ?? 0) === 1 && $count > 0 && album_has_feature($album, 'proof');
 $proofOpen = $proofOn && proof_open($album);
 $pLimit   = (int) ($album['proof_limit'] ?? 0);
 $pPrice   = (float) ($album['proof_extra_price'] ?? 0);
