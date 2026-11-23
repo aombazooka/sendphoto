@@ -528,7 +528,7 @@ admin_header($isNew ? 'สร้างลิงก์แกลเลอรี' :
           <img src="<?= e(media_url($img, 'thumb')) ?>" alt="<?= e($img['name']) ?>" loading="lazy">
           <span class="a-tile__cover">ปก</span>
           <figcaption>
-            <span class="a-tile__name" title="<?= e($img['name']) ?>"><?= e($img['name'] ?: '#' . $img['sort']) ?></span>
+            <span class="a-tile__name" title="<?= e(trim(($img['section'] ?? '') . ' / ' . $img['name'], ' /')) ?>"><?php if (($img['section'] ?? '') !== ''): ?><b class="a-tile__sec"><?= e($img['section']) ?></b> <?php endif; ?><?= e($img['name'] ?: '#' . $img['sort']) ?></span>
             <span class="a-tile__btns">
               <button type="button" data-act="toggle_hidden"><?= (int) $img['hidden'] ? 'แสดง' : 'ซ่อน' ?></button>
               <button type="button" data-act="set_cover">ตั้งเป็นปก</button>

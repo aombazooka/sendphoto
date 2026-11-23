@@ -74,6 +74,15 @@ $proofOpen = $proofOn && proof_open($album);
 $pLimit   = (int) ($album['proof_limit'] ?? 0);
 $pPrice   = (float) ($album['proof_extra_price'] ?? 0);
 $pDead    = !empty($album['proof_deadline']) ? thai_date($album['proof_deadline'], true) : '';
+// Subfolders in Drive become sections ("พิธีเช้า", "ฉลองเย็น" …)
+$sections = [];
+foreach ($images as $n => $img) {
+    $key = (string) ($img['section'] ?? '');
+    if (!isset($sections[$key])) $sections[$key] = ['name' => $key, 'items' => []];
+    $sections[$key]['items'][$n] = $img;
+}
+$sections = array_values($sections);
+$hasSections = count($sections) > 1 || ($sections && $sections[0]['name'] !== '');
 $metaBits = [$count . ' ภาพ'];
 if ($bytes) $metaBits[] = human_bytes($bytes);
 $meta     = implode(' · ', $metaBits);
@@ -169,6 +178,13 @@ $check = '<svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M
 
   <?php if ($count): ?>
   <div class="bar" id="bar">
+    <?php if ($hasSections): ?>
+    <nav class="secnav" id="secnav" aria-label="หมวดภาพ">
+      <?php foreach ($sections as $sk => $sec): ?>
+        <a href="#sec-<?= $sk ?>" data-sec="<?= $sk ?>"><?= e($sec['name'] !== '' ? $sec['name'] : 'ภาพหลัก') ?> <span><?= count($sec['items']) ?></span></a>
+      <?php endforeach; ?>
+    </nav>
+    <?php endif; ?>
     <?php if ($proofOn && $allowDl): ?>
     <div class="modes" role="tablist" aria-label="โหมด">
       <button type="button" role="tab" data-mode="proof"><?= $heart ?> คัดรูป <span class="modes__n" id="pick-badge"></span></button>
@@ -195,8 +211,12 @@ $check = '<svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M
   <?php if (!$count): ?>
     <div class="empty"><div class="empty__mark">✦</div><p class="muted">ภาพกำลังจะมาเร็ว ๆ นี้</p></div>
   <?php else: ?>
-  <div class="jg" id="grid" data-size="m">
-    <?php foreach ($images as $n => $img):
+  <div class="gw" id="grid" data-size="m">
+    <?php foreach ($sections as $sk => $sec): ?>
+    <section class="sec" id="sec-<?= $sk ?>">
+      <?php if ($hasSections): ?><h3 class="sec__h"><?= e($sec['name'] !== '' ? $sec['name'] : 'ภาพหลัก') ?> <span><?= count($sec['items']) ?> ภาพ</span></h3><?php endif; ?>
+      <div class="jg">
+    <?php foreach ($sec['items'] as $n => $img):
         $r = ((int) $img['width'] && (int) $img['height']) ? round($img['width'] / $img['height'], 4) : 0; ?>
       <figure class="tile" data-i="<?= $n ?>" data-id="<?= (int) $img['id'] ?>"<?= $r ? ' style="--r:' . $r . '"' : '' ?>>
         <img src="<?= e(media_url($img, 'thumb', $album['token'])) ?>" alt="ภาพที่ <?= $n + 1 ?>" loading="lazy" decoding="async">
@@ -206,6 +226,9 @@ $check = '<svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M
         <button type="button" class="mark" aria-pressed="false" aria-label="เลือกภาพที่ <?= $n + 1 ?>"><?= $heart ?><?= $check ?></button>
         <?php endif; ?>
       </figure>
+    <?php endforeach; ?>
+      </div>
+    </section>
     <?php endforeach; ?>
   </div>
   <?php endif; ?>

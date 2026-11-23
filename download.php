@@ -73,7 +73,7 @@ foreach ($all as $n => $img) {
         $failed[] = $name;
         continue;
     }
-    $zip->addFile($zip->uniqueName($name), $got[0]);
+    $zip->addFile($zip->uniqueName($name, (string) ($img['section'] ?? '')), $got[0]);
     unset($got);
 }
 if ($failed) {

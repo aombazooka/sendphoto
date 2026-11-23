@@ -47,6 +47,19 @@
   setSize(store.get('sp_size', 'm'));
   sizes?.addEventListener('click', (e) => { const b = e.target.closest('button[data-s]'); if (b) setSize(b.dataset.s); });
 
+  // Section chips (Drive subfolders): highlight the section being viewed.
+  const secnav = $('#secnav');
+  if (secnav && 'IntersectionObserver' in window) {
+    const links = new Map([...secnav.querySelectorAll('a')].map((a) => [a.dataset.sec, a]));
+    const io = new IntersectionObserver((ents) => ents.forEach((en) => {
+      if (!en.isIntersecting) return;
+      links.forEach((a) => a.classList.remove('is-on'));
+      const a = links.get(en.target.id.replace('sec-', ''));
+      if (a) { a.classList.add('is-on'); secnav.scrollTo({ left: a.offsetLeft - 24, behavior: 'smooth' }); }
+    }), { rootMargin: '-40% 0px -55% 0px' });
+    $$('.sec').forEach((s) => io.observe(s));
+  }
+
   // Learn a photo's shape from its thumbnail when the server didn't know it yet.
   $$('.tile img').forEach((img) => {
     const fix = () => {

@@ -6,7 +6,7 @@ define('DATA_DIR', APP_DIR . '/data');
 define('CACHE_DIR', DATA_DIR . '/cache');
 define('UPLOAD_DIR', APP_DIR . '/uploads');
 define('APP_VERSION', '1.1.0');
-define('SCHEMA_VERSION', 5);
+define('SCHEMA_VERSION', 6);
 
 date_default_timezone_set('Asia/Bangkok');
 mb_internal_encoding('UTF-8');

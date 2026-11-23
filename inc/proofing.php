@@ -27,6 +27,9 @@ function migrate_proofing(PDO $pdo): void
             $pdo->exec("ALTER TABLE albums ADD COLUMN $col $def");
         }
     }
+    if (!column_exists($pdo, 'images', 'section')) {
+        $pdo->exec("ALTER TABLE images ADD COLUMN section VARCHAR(190) NOT NULL DEFAULT '' AFTER name");
+    }
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS proofs (
         id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

@@ -24,11 +24,16 @@ final class ZipStream
         header('X-Accel-Buffering: no');
     }
 
-    public function uniqueName(string $name): string
+    /** $folder ("พิธีเช้า / ครอบครัว") becomes folders inside the ZIP. */
+    public function uniqueName(string $name, string $folder = ''): string
     {
-        $name = str_replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], '_', $name);
-        $base = pathinfo($name, PATHINFO_FILENAME);
+        $clean = fn(string $v) => trim(str_replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], '_', $v), ' .');
+        $dir  = implode('/', array_filter(array_map($clean, explode(' / ', $folder)), 'strlen'));
+        $pre  = $dir !== '' ? $dir . '/' : '';
+        $name = $clean($name);
+        $base = $pre . pathinfo($name, PATHINFO_FILENAME);
         $ext  = pathinfo($name, PATHINFO_EXTENSION);
+        $name = $pre . $name;
         $try  = $name;
         $n = 1;
         while (isset($this->names[mb_strtolower($try)])) {

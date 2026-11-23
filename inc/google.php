@@ -38,7 +38,7 @@ function sp_item(string $provider, string $fileId, array $extra = []): array
 {
     return $extra + [
         'provider' => $provider, 'file_id' => $fileId, 'ref' => null,
-        'name' => '', 'mime' => '', 'size_bytes' => 0, 'width' => 0, 'height' => 0,
+        'name' => '', 'mime' => '', 'size_bytes' => 0, 'width' => 0, 'height' => 0, 'section' => '',
     ];
 }
 
@@ -133,7 +133,7 @@ function collect_sources(string $text, ?string $apiKey = null): array
 
 /* ---------------- Google Drive: no API key (embedded folder view) ---------------- */
 
-function drive_folder_scrape(string $folderId, int $depth): array
+function drive_folder_scrape(string $folderId, int $depth, string $path = ''): array
 {
     $html = http_get('https://drive.google.com/embeddedfolderview?id=' . rawurlencode($folderId), $info);
     if ($html === null || ($info['http_code'] ?? 0) >= 400) {
@@ -143,7 +143,8 @@ function drive_folder_scrape(string $folderId, int $depth): array
         throw new RuntimeException('โฟลเดอร์ Google Drive ยังไม่ได้แชร์แบบ "ทุกคนที่มีลิงก์"');
     }
 
-    $items = [];
+    $files = [];
+    $folders = [];
     $parts = preg_split('~<div class="flip-entry"~', $html);
     array_shift($parts);
     foreach ($parts as $chunk) {
@@ -154,13 +155,31 @@ function drive_folder_scrape(string $folderId, int $depth): array
             $title = trim(html_entity_decode(strip_tags($mT[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
         }
         if (preg_match('~href="[^"]*/folders/~', $chunk)) {
-            if ($depth < 3) array_push($items, ...drive_folder_scrape($id, $depth + 1));
+            $folders[] = [$id, $title];
             continue;
         }
         if ($title !== '' && !is_image_name($title)) continue;
-        $items[] = sp_item('drive', $id, ['name' => $title]);
+        $files[] = sp_item('drive', $id, ['name' => $title, 'section' => $path]);
     }
-    usort($items, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));
+    return drive_merge_sections($files, $folders, $depth, $path,
+        fn($id, $sub) => drive_folder_scrape($id, $depth + 1, $sub));
+}
+
+/**
+ * This folder's photos (by name) followed by each subfolder (by name), every
+ * subfolder becoming a section such as "พิธีเช้า" or "พิธีเช้า / ครอบครัว".
+ */
+function drive_merge_sections(array $files, array $folders, int $depth, string $path, callable $recurse): array
+{
+    usort($files, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));
+    usort($folders, fn($a, $b) => strnatcasecmp($a[1], $b[1]));
+    $items = $files;
+    if ($depth < 3) {
+        foreach ($folders as [$id, $title]) {
+            $sub = mb_substr(($path !== '' ? $path . ' / ' : '') . ($title !== '' ? $title : 'โฟลเดอร์'), 0, 190);
+            array_push($items, ...$recurse($id, $sub));
+        }
+    }
     return $items;
 }
 
@@ -197,9 +216,10 @@ function drive_file_api(string $id, string $key): array
     return drive_api_item($data);
 }
 
-function drive_folder_api(string $folderId, string $key, int $depth): array
+function drive_folder_api(string $folderId, string $key, int $depth, string $path = ''): array
 {
-    $items = [];
+    $files = [];
+    $folders = [];
     $pageToken = '';
     do {
         $data = drive_api_get('https://www.googleapis.com/drive/v3/files?' . http_build_query([
@@ -214,14 +234,15 @@ function drive_folder_api(string $folderId, string $key, int $depth): array
         ]));
         foreach ($data['files'] ?? [] as $f) {
             if ($f['mimeType'] === 'application/vnd.google-apps.folder') {
-                if ($depth < 3) array_push($items, ...drive_folder_api($f['id'], $key, $depth + 1));
+                $folders[] = [$f['id'], (string) $f['name']];
                 continue;
             }
-            if (str_starts_with($f['mimeType'], 'image/')) $items[] = drive_api_item($f);
+            if (str_starts_with($f['mimeType'], 'image/')) $files[] = ['section' => $path] + drive_api_item($f);
         }
         $pageToken = $data['nextPageToken'] ?? '';
     } while ($pageToken !== '');
-    return $items;
+    return drive_merge_sections($files, $folders, $depth, $path,
+        fn($id, $sub) => drive_folder_api($id, $key, $depth + 1, $sub));
 }
 
 /* ---------------- Google Photos shared album ---------------- */
@@ -307,22 +328,22 @@ function sync_album(int $albumId): array
     $added = $removed = 0;
     $pdo->beginTransaction();
     try {
-        $ins = $pdo->prepare('INSERT INTO images(album_id, provider, file_id, file_hash, ref, name, mime, size_bytes, width, height, sort)
-                              VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+        $ins = $pdo->prepare('INSERT INTO images(album_id, provider, file_id, file_hash, ref, name, mime, size_bytes, width, height, sort, section)
+                              VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');
         $upd = $pdo->prepare('UPDATE images SET ref = ?, name = ?, mime = ?,
                                 size_bytes = IF(? > 0, ?, size_bytes),
-                                width = IF(? > 0, ?, width), height = IF(? > 0, ?, height), sort = ?
+                                width = IF(? > 0, ?, width), height = IF(? > 0, ?, height), sort = ?, section = ?
                               WHERE id = ?');
         $i = 0;
         foreach ($found as $hash => $it) {
             $i++;
             if (isset($existing[$hash])) {
                 $upd->execute([$it['ref'], $it['name'], $it['mime'], $it['size_bytes'], $it['size_bytes'],
-                               $it['width'], $it['width'], $it['height'], $it['height'], $i, $existing[$hash]]);
+                               $it['width'], $it['width'], $it['height'], $it['height'], $i, $it['section'], $existing[$hash]]);
                 unset($existing[$hash]);
             } else {
                 $ins->execute([$albumId, $it['provider'], $it['file_id'], $hash, $it['ref'], $it['name'], $it['mime'],
-                               $it['size_bytes'], $it['width'], $it['height'], $i]);
+                               $it['size_bytes'], $it['width'], $it['height'], $i, $it['section']]);
                 $added++;
             }
         }
