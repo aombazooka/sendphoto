@@ -157,6 +157,66 @@
     syncCtl();
   }
 
+  /* ---------- Web Push (works with the admin closed) ---------- */
+  const wpBtn = $('#wp-enable');
+  if (wpBtn) {
+    const wpState = $('#wp-state');
+    const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+    const keyBytes = (b64) => {
+      const s = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((b64.length + 3) % 4));
+      return Uint8Array.from(s, (c) => c.charCodeAt(0));
+    };
+    const wpPost = async (action, data) => {
+      const fd = new FormData();
+      fd.append('csrf', csrf);
+      fd.append('action', action);
+      Object.entries(data).forEach(([k, v]) => fd.append(k, v));
+      return (await fetch(base + 'admin/push.php', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'fetch' } })).json();
+    };
+    let reg = null;
+    let sub = null;
+    const show = (txt, on) => {
+      wpState.textContent = txt;
+      wpBtn.textContent = on ? 'ปิด Web Push ในเครื่องนี้' : 'เปิด Web Push';
+      $('#wp-test').hidden = !on;
+      $('#wp-box').classList.toggle('is-on', on);
+    };
+    const refresh = async () => {
+      if (!supported) { show('เบราว์เซอร์นี้ไม่รองรับ (iPhone/iPad ต้อง “เพิ่มไปยังหน้าจอโฮม” ก่อน)', false); wpBtn.hidden = true; return; }
+      if (!window.isSecureContext) { show('ต้องเปิดเว็บผ่าน HTTPS จึงจะใช้ Web Push ได้', false); wpBtn.hidden = true; return; }
+      reg = await navigator.serviceWorker.register(base + 'admin/sw.js', { scope: base + 'admin/' });
+      sub = await reg.pushManager.getSubscription();
+      show(sub ? 'เปิดอยู่ในเครื่องนี้ · แจ้งเตือนจะเด้งแม้ปิดหน้าเว็บ (ต้องเปิดเบราว์เซอร์ค้างไว้)'
+        : (Notification.permission === 'denied' ? 'ถูกบล็อก — อนุญาตการแจ้งเตือนที่ไอคอนแม่กุญแจข้างช่อง URL' : 'ยังไม่ได้เปิดในเครื่องนี้'), !!sub);
+    };
+    wpBtn.addEventListener('click', async () => {
+      wpBtn.disabled = true;
+      try {
+        if (sub) {
+          await wpPost('unsubscribe', { endpoint: sub.endpoint });
+          await sub.unsubscribe();
+          sub = null;
+        } else if (await Notification.requestPermission() === 'granted') {
+          const k = await (await fetch(base + 'admin/push.php', { headers: { 'X-Requested-With': 'fetch' } })).json();
+          sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(k.key) });
+          const j = sub.toJSON();
+          const r = await wpPost('subscribe', { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth });
+          if (!r.ok) throw new Error(r.error || 'บันทึกไม่สำเร็จ');
+          toast('เปิด Web Push แล้ว ✓');
+        }
+      } catch (ex) {
+        toast('เปิด Web Push ไม่สำเร็จ: ' + ex.message, 5000);
+      }
+      wpBtn.disabled = false;
+      refresh();
+    });
+    $('#wp-test')?.addEventListener('click', async () => {
+      const j = await wpPost('test', {});
+      toast(j.result || 'ส่งแล้ว', 4000);
+    });
+    refresh().catch(() => show('เปิดไม่ได้ในเบราว์เซอร์นี้', false));
+  }
+
   /* ---------- copy link ---------- */
   document.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-copy]');

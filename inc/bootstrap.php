@@ -6,7 +6,7 @@ define('DATA_DIR', APP_DIR . '/data');
 define('CACHE_DIR', DATA_DIR . '/cache');
 define('UPLOAD_DIR', APP_DIR . '/uploads');
 define('APP_VERSION', '1.1.0');
-define('SCHEMA_VERSION', 8);
+define('SCHEMA_VERSION', 9);
 
 date_default_timezone_set('Asia/Bangkok');
 mb_internal_encoding('UTF-8');
@@ -17,6 +17,7 @@ require_once __DIR__ . '/proofing.php';
 require_once __DIR__ . '/notify.php';
 require_once __DIR__ . '/features.php';
 require_once __DIR__ . '/selling.php';
+require_once __DIR__ . '/webpush.php';
 
 function config(string $key, $default = null)
 {
@@ -69,6 +70,7 @@ function db(): PDO
         migrate_notify($pdo);
         migrate_features($pdo);
         migrate_selling($pdo);
+        migrate_webpush($pdo);
         file_put_contents($flag, date('c'));
     }
     return $pdo;

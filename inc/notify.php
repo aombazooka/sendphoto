@@ -66,7 +66,9 @@ function notify(int $userId, string $type, string $title, string $body = '', ?in
     if ($external) {
         $icon = NOTIFY_EVENTS[$type][0] ?? '•';
         $text = $icon . ' ' . $title . ($body !== '' ? "\n" . $body : '') . ($link ? "\n\nเปิดดู: " . $link : '');
-        $result = notify_deliver($userId, $text);
+        $result = notify_deliver($userId, $text, [
+            'title' => $icon . ' ' . $title, 'body' => mb_substr($body, 0, 300), 'url' => (string) $link, 'tag' => 'sp-' . $id,
+        ]);
         if ($result) {
             db()->prepare('UPDATE notifications SET delivery = ? WHERE id = ?')->execute([mb_substr($result, 0, 255), $id]);
         }
@@ -75,9 +77,13 @@ function notify(int $userId, string $type, string $title, string $body = '', ?in
 }
 
 /** Send to every configured channel. Returns a short status like "LINE ✓ · Telegram ✗ (401)". */
-function notify_deliver(int $userId, string $text): string
+function notify_deliver(int $userId, string $text, ?array $push = null): string
 {
     $out = [];
+    // Web Push: same tag as the in-page pop-up, so a browser shows it only once.
+    $lines = explode("\n", $text);
+    $wp = webpush_user($userId, $push ?? ['title' => $lines[0], 'body' => implode("\n", array_slice($lines, 1)), 'url' => abs_url('admin/notifications.php')]);
+    if ($wp !== null) $out[] = $wp;
     $lt = (string) user_setting($userId, 'notify_line_token', '');
     $lu = (string) user_setting($userId, 'notify_line_to', '');
     if ($lt !== '' && $lu !== '') {

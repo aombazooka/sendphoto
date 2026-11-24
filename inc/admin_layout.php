@@ -159,5 +159,15 @@ function web_notify_controls(): void
     <button type="button" class="btn btn--sm btn--ghost" id="np-test">ลองแจ้งเตือน</button>
   </div>
 </div>
+<div class="np" id="wp-box">
+  <div class="np__txt">
+    <b>Web Push · เด้งแม้ปิดหน้าเว็บ</b>
+    <small id="wp-state">กำลังตรวจสอบ…</small>
+  </div>
+  <div class="np__acts">
+    <button type="button" class="btn btn--sm" id="wp-enable">เปิด Web Push</button>
+    <button type="button" class="btn btn--sm btn--ghost" id="wp-test" hidden>ทดสอบ Web Push</button>
+  </div>
+</div>
 <?php
 }
