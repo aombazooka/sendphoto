@@ -18,7 +18,7 @@ const NOTIFY_EVENTS = [
     'view'     => ['◉', 'ลูกค้าเปิดลิงก์ครั้งแรก', 'รู้ว่าลูกค้าได้รับแกลเลอรีแล้ว'],
     'order'    => ['฿', 'ลูกค้าส่งสลิปซื้อภาพ', 'ตรวจสลิปแล้วกดอนุมัติ ลูกค้าจะโหลดต้นฉบับได้ทันที'],
     'download' => ['↓', 'ลูกค้าเริ่มบันทึก / ดาวน์โหลดภาพ', 'แจ้งครั้งแรกของแต่ละแกลเลอรี'],
-    'expiring' => ['⏳', 'ลิงก์ใกล้หมดอายุ (3 วัน)', 'แจ้งในระบบ เพื่อให้ต่ออายุหรือเตือนลูกค้า'],
+    'expiring' => ['⏳', 'ลิงก์ใกล้หมดอายุ (3 วัน)', 'แจ้งครั้งเดียวต่อแกลเลอรี (ส่งเข้า LINE/Telegram เมื่อตั้ง cron)'],
 ];
 
 function migrate_notify(PDO $pdo): void
@@ -191,16 +191,16 @@ function user_notifications(int $userId, int $limit = 100): array
 /** Links that expire within 3 days → one in-app reminder each (checked when the photographer opens the admin). */
 function check_expiring_links(int $userId): void
 {
-    static $done = false;
-    if ($done || !notify_enabled($userId, 'expiring')) return;
-    $done = true;
+    static $done = [];
+    if (isset($done[$userId]) || !notify_enabled($userId, 'expiring')) return;
+    $done[$userId] = true;
     $st = db()->prepare('SELECT id, title, expires_at FROM albums WHERE user_id = ? AND is_active = 1
                          AND expires_at > NOW() AND expires_at <= DATE_ADD(NOW(), INTERVAL 3 DAY)');
     $st->execute([$userId]);
     foreach ($st as $a) {
         notify($userId, 'expiring', 'ลิงก์ “' . $a['title'] . '” จะหมดอายุ ' . thai_date($a['expires_at'], true, true) . ' น.',
             'ต่ออายุได้ที่หน้าแก้ไขแกลเลอรี หรือแจ้งลูกค้าให้บันทึกภาพก่อนหมดอายุ',
-            (int) $a['id'], abs_url('admin/album.php?id=' . $a['id']), 'exp:' . $a['id'] . ':' . date('Ymd', strtotime($a['expires_at'])), false);
+            (int) $a['id'], abs_url('admin/album.php?id=' . $a['id']), 'exp:' . $a['id'] . ':' . date('Ymd', strtotime($a['expires_at'])));
     }
 }
 

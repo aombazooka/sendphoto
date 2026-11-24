@@ -187,6 +187,9 @@ function url(string $path = ''): string
 
 function abs_url(string $path = ''): string
 {
+    // Fixed public address (config base_url) – needed for links made by cron.php, which has no web request.
+    $fixed = trim((string) config('base_url', ''));
+    if ($fixed !== '') return rtrim($fixed, '/') . '/' . ltrim($path, '/');
     $https  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
     $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';

@@ -169,6 +169,7 @@ admin_header('ตั้งค่าระบบ', 'platform');
   <?= csrf_field() ?><input type="hidden" name="section" value="cache">
   <header class="panel__hd"><p class="step">Cache</p><h2 class="panel__title">แคชภาพตัวอย่าง</h2></header>
   <p class="hint">ระบบเก็บภาพย่อไว้บนเซิร์ฟเวอร์เพื่อให้เปิดเร็ว ล้างได้ถ้าแก้ไขภาพต้นฉบับแล้วภาพยังไม่อัปเดต</p>
+  <p class="hint">งานตั้งเวลา (cron.php): <?= setting('cron_last_run') ? 'ทำงานล่าสุด ' . e(thai_date(setting('cron_last_run'), true, true)) . ' น.' : '<b>ยังไม่เคยทำงาน</b> — ตั้งให้รันทุกชั่วโมง (ดูวิธีใน README)' ?></p>
   <div class="form__foot"><button class="btn btn--ghost" type="submit">ล้างแคช</button></div>
 </form>
 <?php admin_footer();
