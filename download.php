@@ -19,7 +19,11 @@ function deny(int $code, string $msg): never
 $token = (string) ($_REQUEST['t'] ?? '');
 $album = $token !== '' ? find_album_by_token($token) : null;
 if (!$album || !album_is_public($album)) deny(404, 'ลิงก์นี้หมดอายุหรือถูกปิดแล้ว');
-if (!(int) $album['allow_download']) deny(403, 'อัลบั้มนี้ไม่ได้เปิดให้ดาวน์โหลด');
+$selling = sell_on($album);
+if (!$selling && !(int) $album['allow_download']) deny(403, 'อัลบั้มนี้ไม่ได้เปิดให้ดาวน์โหลด');
+// Selling galleries: originals only for photos this client (k = their browser key) has paid for.
+$owned = $selling ? client_owned((int) $album['id'], (string) ($_REQUEST['k'] ?? '')) : null;
+$mayHave = fn(array $img) => !$owned || $owned['all'] || isset($owned['ids'][(int) $img['id']]);
 
 $albumId = (int) $album['id'];
 $count = function () use ($albumId, $album) {
@@ -34,6 +38,7 @@ $count = function () use ($albumId, $album) {
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $img = find_image($albumId, (int) ($_GET['i'] ?? 0));
     if (!$img || (int) $img['hidden']) deny(404, 'ไม่พบภาพ');
+    if (!$mayHave($img)) deny(402, 'ภาพนี้ต้องซื้อก่อนจึงจะดาวน์โหลดไฟล์ต้นฉบับได้');
     if (($_GET['c'] ?? '1') === '1') $count();
 
     $name = download_name($img, (int) $img['sort'], (string) $img['mime']);
@@ -55,7 +60,8 @@ if (empty($_POST['all'])) {
     $want = array_flip(array_map('intval', explode(',', (string) ($_POST['ids'] ?? ''))));
     $all = array_values(array_filter($all, fn($im) => isset($want[(int) $im['id']])));
 }
-if (!$all) deny(400, 'ยังไม่ได้เลือกภาพ');
+$all = array_values(array_filter($all, $mayHave));
+if (!$all) deny($selling ? 402 : 400, $selling ? 'ยังไม่มีภาพที่ซื้อแล้วในรายการนี้' : 'ยังไม่ได้เลือกภาพ');
 
 @set_time_limit(0);
 @ini_set('memory_limit', '1024M');

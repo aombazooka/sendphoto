@@ -35,6 +35,7 @@ $form = $album ?? [
     'event_date' => date('Y-m-d'), 'sources' => '', 'is_active' => 1, 'allow_download' => 1,
     'expires_at' => null, 'cover_file' => null, 'logo_file' => null, 'cover_style' => 'editorial',
     'proof_enabled' => 0, 'proof_limit' => 0, 'proof_extra_price' => 0, 'proof_deadline' => null, 'proof_message' => '',
+    'watermark_enabled' => 0, 'sell_enabled' => 0, 'sell_price_photo' => 0, 'sell_price_all' => 0,
 ];
 $expiryMode = $isNew ? '1y' : 'keep';
 
@@ -56,7 +57,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'proof_extra_price' => max(0, min(1000000, round((float) ($_POST['proof_extra_price'] ?? 0), 2))),
         'proof_deadline' => trim((string) ($_POST['proof_deadline'] ?? '')) ?: null,
         'proof_message'  => trim(mb_substr((string) ($_POST['proof_message'] ?? ''), 0, 500)),
+        'watermark_enabled' => isset($_POST['watermark_enabled']) && has_feature($me, 'sell') ? 1 : 0,
+        'sell_enabled'   => isset($_POST['sell_enabled']) && has_feature($me, 'sell') ? 1 : 0,
+        'sell_price_photo' => max(0, min(1000000, round((float) ($_POST['sell_price_photo'] ?? 0), 2))),
+        'sell_price_all' => max(0, min(10000000, round((float) ($_POST['sell_price_all'] ?? 0), 2))),
     ]);
+    if ($form['sell_enabled'] && $form['sell_price_photo'] <= 0 && $form['sell_price_all'] <= 0) {
+        $errors[] = 'เปิดขายภาพแล้ว กรุณาตั้งราคาต่อภาพ หรือราคาซื้อทั้งหมด';
+    }
+    if ($form['sell_enabled'] && !user_setting($uid, 'pay_promptpay') && !user_setting($uid, 'pay_note')) {
+        $errors[] = 'ก่อนเปิดขายภาพ กรุณาใส่ช่องทางรับเงิน (พร้อมเพย์ หรือบัญชีธนาคาร) ที่หน้า ตั้งค่าร้าน';
+    }
 
     // Link lifetime
     $expiryMode = (string) ($_POST['expiry_mode'] ?? 'keep');
@@ -110,20 +121,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $vals = [$form['title'], $form['client'], $form['tagline'], $form['description'], $form['event_date'],
                  $form['sources'], $form['cover_file'], $form['logo_file'], $form['is_active'],
                  $form['allow_download'], $form['expires_at'], $form['cover_style'], $form['proof_enabled'],
-                 $form['proof_limit'], $form['proof_extra_price'], $form['proof_deadline'], $form['proof_message']];
+                 $form['proof_limit'], $form['proof_extra_price'], $form['proof_deadline'], $form['proof_message'],
+                 $form['watermark_enabled'], $form['sell_enabled'], $form['sell_price_photo'], $form['sell_price_all']];
         $sourcesChanged = $isNew || $form['sources'] !== (string) $album['sources'];
 
         if ($isNew) {
             do { $token = new_token(); } while (find_album_by_token($token));
             db()->prepare('INSERT INTO albums(user_id, title, client, tagline, description, event_date, sources, cover_file, logo_file,
                            is_active, allow_download, expires_at, cover_style, proof_enabled, proof_limit, proof_extra_price,
-                           proof_deadline, proof_message, token) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                           proof_deadline, proof_message, watermark_enabled, sell_enabled, sell_price_photo, sell_price_all, token)
+                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
                 ->execute([$uid, ...$vals, $token]);
             $id = (int) db()->lastInsertId();
         } else {
             db()->prepare('UPDATE albums SET title=?, client=?, tagline=?, description=?, event_date=?, sources=?, cover_file=?,
                            logo_file=?, is_active=?, allow_download=?, expires_at=?, cover_style=?, proof_enabled=?, proof_limit=?,
-                           proof_extra_price=?, proof_deadline=?, proof_message=? WHERE id=? AND user_id=?')
+                           proof_extra_price=?, proof_deadline=?, proof_message=?, watermark_enabled=?, sell_enabled=?,
+                           sell_price_photo=?, sell_price_all=? WHERE id=? AND user_id=?')
                 ->execute([...$vals, $id, $uid]);
         }
 
@@ -159,6 +173,10 @@ $logoUrl  = $logoMode === 'custom' ? upload_url($form['logo_file']) : ($logoMode
 $st = db()->prepare('SELECT id, user_id, title, token, is_active, expires_at FROM albums WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 6');
 $st->execute([$uid]);
 $recent = $st->fetchAll();
+
+// Orders (selling)
+$orders = $album ? album_orders((int) $album['id']) : [];
+if ($orders) db()->prepare('UPDATE orders SET seen = 1 WHERE album_id = ? AND seen = 0')->execute([(int) $album['id']]);
 
 // Client proofing lists
 $proofs = $album ? album_proofs((int) $album['id']) : [];
@@ -354,6 +372,32 @@ admin_header($isNew ? 'สร้างลิงก์แกลเลอรี' :
       </div>
     </section>
 
+    <section class="fset <?= (int) $form['sell_enabled'] || (int) $form['watermark_enabled'] ? 'is-on' : '' ?>" id="sell-set">
+      <div class="fset__hd">
+        <span class="field__lbl">฿ ลายน้ำ + ขายรูป <em>ภาพตัวอย่างมีลายน้ำ ลูกค้าจ่ายผ่านพร้อมเพย์แล้วโหลดไฟล์ต้นฉบับได้</em></span>
+        <?php if (has_feature($me, 'sell')): ?>
+        <label class="switch"><input type="checkbox" name="watermark_enabled" id="f-wm" <?= (int) $form['watermark_enabled'] || (int) $form['sell_enabled'] ? 'checked' : '' ?>><i></i> ลายน้ำ</label>
+        <?php endif; ?>
+      </div>
+      <?php if (!has_feature($me, 'sell')): ?><div class="fset__lock"><?= feature_locked_note('sell') ?></div><?php else: ?>
+      <div class="fset__body">
+        <label class="switch"><input type="checkbox" name="sell_enabled" id="f-sell" <?= (int) $form['sell_enabled'] ? 'checked' : '' ?>><i></i> ขายภาพ — ลูกค้าต้องซื้อก่อนจึงโหลดต้นฉบับได้</label>
+        <div class="row">
+          <label class="field">
+            <span class="field__lbl">ราคาต่อภาพ (บาท)</span>
+            <input type="number" name="sell_price_photo" min="0" step="1" value="<?= e(rtrim(rtrim(number_format((float) $form['sell_price_photo'], 2, '.', ''), '0'), '.')) ?>" inputmode="decimal">
+          </label>
+          <label class="field">
+            <span class="field__lbl">ซื้อทั้งหมดในราคา (บาท)</span>
+            <input type="number" name="sell_price_all" min="0" step="1" value="<?= e(rtrim(rtrim(number_format((float) $form['sell_price_all'], 2, '.', ''), '0'), '.')) ?>" inputmode="decimal">
+            <small class="hint">0 = ไม่มีราคาเหมา · ถ้าเลือกหลายภาพจนแพงกว่าราคาเหมา ระบบคิดราคาเหมาให้อัตโนมัติ</small>
+          </label>
+        </div>
+        <p class="hint">ข้อความลายน้ำและบัญชีรับเงิน ตั้งได้ที่ <a href="<?= e(url('admin/settings.php#selling')) ?>">ตั้งค่าร้าน › ขายรูป</a><?= user_setting($uid, 'pay_promptpay') ? '' : ' — <b>ยังไม่ได้ใส่พร้อมเพย์</b>' ?></p>
+      </div>
+      <?php endif; ?>
+    </section>
+
     <div class="form__foot">
       <button class="btn btn--primary btn--wide" type="submit"><?= $isNew ? 'สร้างลิงก์แกลเลอรี' : 'บันทึกการเปลี่ยนแปลง' ?></button>
       <?php if (!$isNew): ?><button class="btn btn--danger-ghost" type="submit" form="del-form">ลบอัลบั้ม</button><?php endif; ?>
@@ -506,6 +550,59 @@ admin_header($isNew ? 'สร้างลิงก์แกลเลอรี' :
             <?= csrf_field() ?><input type="hidden" name="action" value="proof_delete"><input type="hidden" name="id" value="<?= (int) $album['id'] ?>"><input type="hidden" name="proof" value="<?= (int) $p['id'] ?>">
             <button class="btn btn--sm btn--danger-ghost" type="submit">ลบ</button>
           </form>
+        </div>
+      </article>
+    <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
+</section>
+<?php endif; ?>
+
+<?php if (sell_on($album) || $orders): ?>
+<section class="panel" id="orders">
+  <div class="panel__head">
+    <div>
+      <p class="step">ขายรูป</p>
+      <h2 class="panel__title">คำสั่งซื้อ <span class="muted">(<?= count($orders) ?>)</span></h2>
+    </div>
+    <p class="hint">ราคาต่อภาพ ฿<?= e(money($album['sell_price_photo'])) ?><?= (float) $album['sell_price_all'] > 0 ? ' · ทั้งหมด ฿' . e(money($album['sell_price_all'])) : '' ?> · ยอดที่ชำระแล้ว ฿<?= e(money(array_sum(array_map(fn($o) => $o['status'] === 'paid' ? (float) $o['amount'] : 0, $orders)))) ?></p>
+  </div>
+  <?php if (!$orders): ?>
+    <div class="empty empty--sm"><p class="muted">ยังไม่มีคำสั่งซื้อ — ลูกค้าเลือกภาพ กด “ซื้อภาพ” โอนผ่านพร้อมเพย์ แล้วแนบสลิป รายการจะขึ้นที่นี่</p></div>
+  <?php else: ?>
+    <div class="orders">
+    <?php foreach ($orders as $o): ?>
+      <article class="order order--<?= e($o['status']) ?>">
+        <div class="order__main">
+          <h3 class="order__name"><?= e($o['name']) ?> <span class="pill pill--<?= ['review' => 'pending', 'paid' => 'active', 'rejected' => 'rejected'][$o['status']] ?? '' ?>"><?= e(order_status_label($o['status'])) ?></span></h3>
+          <p class="order__meta"><?= $o['contact'] !== '' ? e($o['contact']) . ' · ' : '' ?><?= (int) $o['is_all'] ? 'ซื้อภาพทั้งหมด' : (int) $o['photo_count'] . ' ภาพ' ?> · <b>฿<?= e(money($o['amount'])) ?></b> · ส่งสลิป <?= $o['slip_at'] ? e(thai_date($o['slip_at'], true, true)) : '—' ?></p>
+          <?php if ($o['status'] === 'rejected' && $o['reject_reason'] !== ''): ?><p class="order__reason">เหตุผล: <?= e($o['reject_reason']) ?></p><?php endif; ?>
+          <?php if (!(int) $o['is_all']): $oi = array_slice(array_filter(array_map('intval', explode(',', $o['image_ids']))), 0, 8); ?>
+            <span class="proof__strip"><?php foreach ($oi as $iid): $im = find_image((int) $album['id'], $iid); if ($im): ?><img src="<?= e(media_url($im, 'thumb')) ?>" alt="" loading="lazy"><?php endif; endforeach; ?></span>
+          <?php endif; ?>
+        </div>
+        <div class="order__acts">
+          <?php if ($o['slip_file']): ?><a class="btn btn--sm btn--ghost" href="<?= e(url('admin/order_slip.php?id=' . (int) $o['id'])) ?>" target="_blank" rel="noopener">ดูสลิป</a><?php endif; ?>
+          <?php if ($o['status'] === 'paid'): ?><button type="button" class="btn btn--sm" data-copy="<?= e(share_url($album['token']) . '?k=' . $o['client_key']) ?>" data-copy-msg="คัดลอกลิงก์ของลูกค้าแล้ว — ส่งให้ลูกค้าทาง LINE ได้ เปิดจากเครื่องไหนก็โหลดภาพที่ซื้อได้" title="ใช้เมื่อลูกค้าเปลี่ยนเครื่องหรือล้างเบราว์เซอร์">ลิงก์ดาวน์โหลดของลูกค้า</button><?php endif; ?>
+          <?php if ($o['status'] !== 'paid'): ?>
+          <form method="post" action="<?= e(url('admin/action.php')) ?>" data-confirm="ยืนยันว่าได้รับเงิน ฿<?= e(money($o['amount'])) ?> จาก <?= e($o['name']) ?> แล้ว? ลูกค้าจะโหลดไฟล์ต้นฉบับได้ทันที">
+            <?= csrf_field() ?><input type="hidden" name="action" value="order_approve"><input type="hidden" name="id" value="<?= (int) $album['id'] ?>"><input type="hidden" name="order" value="<?= (int) $o['id'] ?>">
+            <button class="btn btn--sm btn--primary" type="submit">อนุมัติ</button>
+          </form>
+          <?php endif; ?>
+          <?php if ($o['status'] === 'review'): ?>
+          <form method="post" action="<?= e(url('admin/action.php')) ?>" class="order__reject">
+            <?= csrf_field() ?><input type="hidden" name="action" value="order_reject"><input type="hidden" name="id" value="<?= (int) $album['id'] ?>"><input type="hidden" name="order" value="<?= (int) $o['id'] ?>">
+            <input type="text" name="reason" maxlength="200" placeholder="เหตุผล (เช่น ยอดไม่ตรง)">
+            <button class="btn btn--sm btn--danger-ghost" type="submit">ไม่อนุมัติ</button>
+          </form>
+          <?php endif; ?>
+          <?php if ($o['status'] === 'paid'): ?>
+          <form method="post" action="<?= e(url('admin/action.php')) ?>" data-confirm="ยกเลิกการอนุมัติ? ลูกค้าจะโหลดไฟล์ต้นฉบับของคำสั่งซื้อนี้ไม่ได้">
+            <?= csrf_field() ?><input type="hidden" name="action" value="order_revoke"><input type="hidden" name="id" value="<?= (int) $album['id'] ?>"><input type="hidden" name="order" value="<?= (int) $o['id'] ?>">
+            <button class="btn btn--sm btn--ghost" type="submit">ยกเลิกอนุมัติ</button>
+          </form>
+          <?php endif; ?>
         </div>
       </article>
     <?php endforeach; ?>

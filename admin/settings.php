@@ -35,6 +35,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($section === 'selling') {
+        $pp = preg_replace('/\D/', '', (string) ($_POST['pay_promptpay'] ?? ''));
+        if ($pp !== '' && !promptpay_payload($pp)) {
+            $errors[] = 'หมายเลขพร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลขบัตรประชาชน/เลขผู้เสียภาษี 13 หลัก';
+        } else {
+            set_user_setting($uid, 'pay_promptpay', $pp);
+            set_user_setting($uid, 'pay_name', mb_substr(trim((string) ($_POST['pay_name'] ?? '')), 0, 120));
+            set_user_setting($uid, 'pay_note', mb_substr(trim((string) ($_POST['pay_note'] ?? '')), 0, 500));
+            set_user_setting($uid, 'wm_text', mb_substr(trim((string) ($_POST['wm_text'] ?? '')), 0, 60));
+            set_user_setting($uid, 'wm_logo', !empty($_POST['wm_logo']) ? '1' : '0');
+            flash('บันทึกการตั้งค่าขายรูปแล้ว');
+            redirect(url('admin/settings.php#selling'));
+        }
+    }
+
     if ($section === 'notify') {
         foreach (array_keys(NOTIFY_EVENTS) as $ev) {
             set_user_setting($uid, 'notify_ev_' . $ev, isset($_POST['ev'][$ev]) ? '1' : '0');
@@ -196,6 +211,38 @@ $tgChat  = (string) user_setting($uid, 'notify_tg_chat', '');
 $lineOn  = $lineTok !== '' && $lineTo !== '';
 $tgOn    = $tgTok !== '' && $tgChat !== '';
 ?>
+<section class="panel" id="selling">
+  <header class="panel__hd">
+    <p class="step">Selling</p>
+    <h2 class="panel__title">ขายรูป · ลายน้ำ · รับเงินจากลูกค้า</h2>
+    <p class="hint">ใช้กับแกลเลอรีที่เปิด “ขายภาพ” — ลูกค้าสแกน QR พร้อมเพย์ (ใส่ยอดให้อัตโนมัติ) แล้วแนบสลิป คุณกดอนุมัติ ลูกค้าโหลดต้นฉบับได้ทันที</p>
+  </header>
+  <?php if (!has_feature($me, 'sell')): ?>
+    <?= feature_locked_note('sell') ?>
+  <?php else: ?>
+  <form method="post" class="form">
+    <?= csrf_field() ?><input type="hidden" name="section" value="selling">
+    <div class="row">
+      <label class="field"><span class="field__lbl">พร้อมเพย์ของร้าน <em>เบอร์มือถือ หรือเลขบัตร/ผู้เสียภาษี</em></span>
+        <input type="text" name="pay_promptpay" value="<?= e(user_setting($uid, 'pay_promptpay', '')) ?>" class="mono" inputmode="numeric" placeholder="08xxxxxxxx"></label>
+      <label class="field"><span class="field__lbl">ชื่อบัญชี <em>ให้ลูกค้าตรวจก่อนโอน</em></span>
+        <input type="text" name="pay_name" value="<?= e(user_setting($uid, 'pay_name', '')) ?>" maxlength="120" placeholder="เช่น นาย ก. ใจดี"></label>
+    </div>
+    <label class="field"><span class="field__lbl">บัญชีธนาคาร / ข้อความถึงลูกค้า <em>ไม่บังคับ</em></span>
+      <textarea name="pay_note" rows="2" maxlength="500" placeholder="เช่น กสิกรไทย 123-4-56789-0 · โอนแล้วแนบสลิป ช่างจะอนุมัติภายใน 1 ชม."><?= e(user_setting($uid, 'pay_note', '')) ?></textarea></label>
+    <div class="row">
+      <label class="field"><span class="field__lbl">ข้อความลายน้ำ <em>เว้นว่าง = ชื่อร้าน</em></span>
+        <input type="text" name="wm_text" value="<?= e(user_setting($uid, 'wm_text', '')) ?>" maxlength="60" placeholder="<?= e($me['shop_name']) ?>"></label>
+      <div class="field"><span class="field__lbl">ตัวเลือกลายน้ำ</span>
+        <label class="switch"><input type="checkbox" name="wm_logo" value="1" <?= user_setting($uid, 'wm_logo', '0') === '1' ? 'checked' : '' ?>><i></i> ใส่โลโก้กลางภาพด้วย</label>
+        <small class="hint">แนะนำข้อความภาษาอังกฤษสั้น ๆ จะคมชัดที่สุด<?= watermark_font() ? '' : ' · <b>ไม่พบฟอนต์ในเซิร์ฟเวอร์ ระบบจะใช้ตัวอักษรพื้นฐาน (เฉพาะภาษาอังกฤษ)</b>' ?></small>
+      </div>
+    </div>
+    <div class="form__foot"><button class="btn btn--primary" type="submit">บันทึก</button></div>
+  </form>
+  <?php endif; ?>
+</section>
+
 <section class="panel" id="notify">
   <header class="panel__hd">
     <p class="step">Notifications</p>

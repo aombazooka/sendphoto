@@ -18,7 +18,11 @@
   const imgs = G.images;
   const byId = new Map(imgs.map((im, i) => [im.id, { ...im, i }]));
   const media = (id, s) => `${G.base}media.php?t=${encodeURIComponent(G.token)}&i=${id}&s=${s}`;
-  const original = (id, count) => `${G.base}download.php?t=${encodeURIComponent(G.token)}&i=${id}&c=${count ? 1 : 0}`;
+  const original = (id, count) => `${G.base}download.php?t=${encodeURIComponent(G.token)}&i=${id}&c=${count ? 1 : 0}&k=${clientKey}`;
+  const S = G.sell;   // null when the gallery isn't selling
+  const owned = { all: false, ids: new Set() };
+  let myOrders = [];
+  const isOwned = (id) => !S || owned.all || owned.ids.has(id);
   const P = G.proof;   // null when proofing is off
 
   /* ---------- in-app browsers (LINE / Facebook / Instagram) ---------- */
@@ -82,6 +86,12 @@
   let proof = null;            // what the server has for this browser
   let mode = P ? (G.allowDl ? store.get(keyOf('mode'), 'proof') : 'proof') : 'save';
 
+  // A personal link from the photographer (?k=…) restores purchases on a new device / cleared browser.
+  const linkKey = new URLSearchParams(location.search).get('k');
+  if (linkKey && /^[a-f0-9]{32}$/.test(linkKey)) {
+    store.set('sp_ckey', linkKey);
+    const u = new URL(location.href); u.searchParams.delete('k'); history.replaceState(null, '', u.toString());
+  }
   let clientKey = store.get('sp_ckey', '');
   if (!/^[a-f0-9]{32}$/.test(clientKey)) {
     const a = new Uint8Array(16);
@@ -106,6 +116,7 @@
     const on = mode === 'proof' ? picks.has(id) : saves.has(id);
     t.classList.toggle('is-on', on);
     t.classList.toggle('is-picked', picks.has(id));
+    if (S) t.classList.toggle('is-owned', owned.all || owned.ids.has(id));
     t.querySelector('.mark')?.setAttribute('aria-pressed', on);
   };
   const paintAll = () => imgs.forEach((im) => paintTile(im.id));
@@ -269,6 +280,18 @@
     thumbs(order(saves));
     $('#dock-count').innerHTML = `เลือกแล้ว <b>${n}</b> ภาพ`;
     if (busy) return;
+    if (S) {
+      const toBuy = order(saves).filter((id) => !isOwned(id));
+      if (toBuy.length) {
+        const q = sellQuote(toBuy.length);
+        const have = n - toBuy.length;
+        saveBtn.disabled = false;
+        saveBtn.textContent = q.isAll ? `ซื้อทั้งหมด · ฿${fmt(q.amount)}` : `ซื้อ ${toBuy.length} ภาพ · ฿${fmt(q.amount)}`;
+        note.textContent = (have ? `ซื้อแล้ว ${have} ภาพ · ` : '') + 'ชำระผ่านพร้อมเพย์ แนบสลิป แล้วโหลดไฟล์ต้นฉบับได้';
+        zip.hidden = true;
+        return;
+      }
+    }
     if (directMode) {
       saveBtn.disabled = false;
       saveBtn.textContent = `บันทึก ${n} ภาพลงเครื่อง`;
@@ -362,12 +385,17 @@
     if (!f) return;
     f.ids.value = all ? '' : ids.join(',');
     f.all.value = all ? '1' : '';
+    if (f.k) f.k.value = clientKey;
     f.submit();
     toast('กำลังเตรียมไฟล์ ZIP… การดาวน์โหลดจะเริ่มในไม่ช้า', 5000);
   };
 
   saveBtn?.addEventListener('click', async () => {
     if (mode === 'proof') { openSend(); return; }
+    if (S) {
+      const toBuy = order(saves).filter((id) => !isOwned(id));
+      if (toBuy.length) { openBuy(toBuy, false); return; }
+    }
     if (directMode) { if (!busy) directDownload(order(saves)); return; }
     if (!shareMode) { submitZip(order(saves)); return; }
     if (busy) return;
@@ -515,7 +543,8 @@
     const dl = $('#lb-dl');
     if (dl) {
       dl.href = original(im.id, true);
-      dl.textContent = shareMode ? 'บันทึกลง Photos' : (directMode ? 'บันทึกภาพ' : 'ดาวน์โหลด');
+      dl.textContent = S && !isOwned(im.id) ? `ซื้อภาพนี้ ฿${fmt(S.photo)}`
+        : (shareMode ? 'บันทึกลง Photos' : (directMode ? 'บันทึกภาพ' : 'ดาวน์โหลด'));
       dl.classList.remove('is-busy');
     }
     syncLb();
@@ -543,6 +572,14 @@
     }
   };
   lbDl?.addEventListener('click', async (e) => {
+    if (S && !isOwned(imgs[lbIndex].id)) {
+      e.preventDefault();
+      const id = imgs[lbIndex].id;
+      saves.add(id); persist(); paintTile(id); render();
+      closeLb();
+      openBuy([id], false);
+      return;
+    }
     if (!shareMode) return;
     e.preventDefault();
     if (lbDl.classList.contains('is-busy')) return;
@@ -580,6 +617,145 @@
     else if (dy > 90 && Math.abs(dy) > Math.abs(dx)) closeLb();
   }, { passive: true });
 
+  /* ---------- buying photos (selling galleries) ---------- */
+  const fmt = (n) => Number(n).toLocaleString('th-TH', { maximumFractionDigits: 2 });
+  const sellQuote = (count) => {
+    const total = S.total;   // same rule as the server (sell_quote)
+    const isAll = S.all > 0 && (count >= total || count * S.photo >= S.all);
+    return { isAll, amount: isAll ? S.all : count * S.photo };
+  };
+  $$('dialog [data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
+
+  const applyOrders = (j) => {
+    const before = owned.all ? Infinity : owned.ids.size;
+    owned.all = !!j.owned.all;
+    owned.ids = new Set(j.owned.ids);
+    const wasReview = myOrders.some((o) => o.status === 'review');
+    myOrders = j.orders || [];
+    const after = owned.all ? Infinity : owned.ids.size;
+    if (after > before && wasReview) toast('ช่างภาพยืนยันการชำระเงินแล้ว ♡ บันทึกภาพได้เลย', 5000);
+    const mo = $('#my-orders');
+    if (mo) {
+      const wait = myOrders.filter((o) => o.status === 'review').length;
+      mo.hidden = !myOrders.length;
+      mo.textContent = 'คำสั่งซื้อของฉัน' + (wait ? ` (รอยืนยัน ${wait})` : '');
+    }
+    const za = $('#zip-all'); if (za) za.hidden = !owned.all;
+    const ba = $('#buy-all'); if (ba) ba.hidden = owned.all;
+    paintAll();
+    render();
+  };
+
+  const orderApi = async (fd) => {
+    fd.append('t', G.token);
+    fd.append('key', clientKey);
+    const j = await (await fetch(G.base + 'order.php', { method: 'POST', body: fd })).json();
+    if (!j.ok) throw new Error(j.error || 'ทำรายการไม่สำเร็จ');
+    return j;
+  };
+  let pollT = null;
+  const loadOrders = async () => {
+    if (!S) return;
+    try {
+      const fd = new FormData(); fd.append('action', 'list');
+      applyOrders(await orderApi(fd));
+    } catch { /* offline */ }
+    clearTimeout(pollT);
+    if (myOrders.some((o) => o.status === 'review')) pollT = setTimeout(loadOrders, 30000);
+  };
+
+  let buying = { ids: [], all: false };
+  const openBuy = (ids, all) => {
+    const dlg = $('#buy-dlg'); if (!dlg) return;
+    buying = { ids, all };
+    const q = all ? { isAll: true, amount: S.all } : sellQuote(ids.length);
+    $('#buy-sum').innerHTML = q.isAll ? `ภาพทั้งหมด <b>${S.total} ภาพ</b> · <b>฿${fmt(q.amount)}</b>`
+      : `ไฟล์ต้นฉบับ <b>${ids.length} ภาพ</b> × ฿${fmt(S.photo)} = <b>฿${fmt(q.amount)}</b>`;
+    const me = store.get('sp_me', {});
+    const f = $('#buy-form');
+    f.name.value = f.name.value || me.name || '';
+    f.contact.value = f.contact.value || me.contact || '';
+    $('#buy-err').hidden = true;
+    dlg.showModal();
+  };
+  $('#buy-all')?.addEventListener('click', () => openBuy(imgs.map((im) => im.id).filter((id) => !isOwned(id)), true));
+  $('#buy-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const go = $('#buy-go'); go.disabled = true;
+    try {
+      const f = e.target;
+      const fd = new FormData(f);
+      fd.append('action', 'create');
+      if (buying.all) fd.append('all', '1'); else fd.append('ids', buying.ids.join(','));
+      const j = await orderApi(fd);
+      store.set('sp_me', { name: f.name.value, contact: f.contact.value });
+      applyOrders(j);
+      $('#buy-dlg').close();
+      openPay(myOrders.find((o) => o.id === j.order));
+    } catch (ex) { const er = $('#buy-err'); er.textContent = ex.message; er.hidden = false; }
+    go.disabled = false;
+  });
+
+  let paying = null;
+  const openPay = (o) => {
+    if (!o) return;
+    paying = o;
+    $('#pay-no').textContent = o.id;
+    $('#pay-amount').textContent = fmt(o.amount);
+    const qr = $('#pay-qr');
+    qr.innerHTML = '';
+    const pay = o.pay || {};
+    if (pay.payload && typeof qrcode === 'function') {
+      const q = qrcode(0, 'M'); q.addData(pay.payload); q.make();
+      qr.innerHTML = q.createImgTag(5, 8);
+      qr.insertAdjacentHTML('beforeend', '<small>สแกนด้วยแอปธนาคาร ยอดเงินใส่ให้อัตโนมัติ</small>');
+    }
+    $('#pay-to').textContent = [pay.promptpay ? 'พร้อมเพย์ ' + pay.promptpay : '', pay.name].filter(Boolean).join(' · ');
+    $('#pay-note').textContent = (o.status === 'rejected' && o.reason ? 'สลิปก่อนหน้าไม่ผ่าน: ' + o.reason + ' — ' : '') + (pay.note || '');
+    $('#pay-err').hidden = true;
+    $('#pay-form').reset();
+    $('#pay-dlg').showModal();
+  };
+  $('#pay-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!paying) return;
+    const go = $('#pay-go'); go.disabled = true; go.textContent = 'กำลังส่ง…';
+    try {
+      const fd = new FormData(e.target);
+      fd.append('action', 'slip');
+      fd.append('order', paying.id);
+      applyOrders(await orderApi(fd));
+      $('#pay-dlg').close();
+      toast('ส่งสลิปแล้ว รอช่างภาพยืนยัน — หน้านี้จะอัปเดตให้อัตโนมัติ', 5000);
+      loadOrders();
+    } catch (ex) { const er = $('#pay-err'); er.textContent = ex.message; er.hidden = false; }
+    go.disabled = false; go.textContent = 'ส่งสลิป';
+  });
+
+  $('#my-orders')?.addEventListener('click', () => {
+    const ul = $('#myorders');
+    ul.innerHTML = '';
+    myOrders.forEach((o) => {
+      const li = document.createElement('li');
+      li.className = 'myorder myorder--' + o.status;
+      li.innerHTML = '<div><b></b><small></small></div><span class="myorder__st"></span>';
+      li.querySelector('b').textContent = `#${o.id} · ${o.is_all ? 'ภาพทั้งหมด' : o.count + ' ภาพ'} · ฿${fmt(o.amount)}`;
+      li.querySelector('small').textContent = o.when + (o.status === 'rejected' && o.reason ? ' · ' + o.reason : '');
+      li.querySelector('.myorder__st').textContent = o.label;
+      if (o.status === 'pending' || o.status === 'rejected') {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'cbtn cbtn--solid cbtn--sm';
+        b.textContent = o.status === 'rejected' ? 'แนบสลิปใหม่' : 'ชำระ / แนบสลิป';
+        b.addEventListener('click', () => { $('#orders-dlg').close(); openPay(o); });
+        li.appendChild(b);
+      }
+      ul.appendChild(li);
+    });
+    $('#orders-dlg').showModal();
+  });
+  window.addEventListener('focus', loadOrders);
+
   setMode(mode);
   loadProof();
+  loadOrders();
 })();

@@ -66,7 +66,11 @@ $count    = count($images);
 $bytes    = array_sum(array_map(fn($i) => (int) $i['size_bytes'], $images));
 $cover    = album_cover_url($album, true, 'preview');
 $logo     = album_logo_url($album);
-$allowDl  = (int) $album['allow_download'] === 1;
+$sellOn   = sell_on($album);
+$sellPhoto = (float) ($album['sell_price_photo'] ?? 0);
+$sellAll  = (float) ($album['sell_price_all'] ?? 0);
+// When selling, the client still picks photos to save – originals unlock once their order is paid.
+$allowDl  = (int) $album['allow_download'] === 1 || $sellOn;
 $contact  = user_setting($ownerId, 'contact', '');
 $style    = ($album['cover_style'] ?? 'editorial') === 'full' ? 'full' : 'editorial';
 $proofOn  = (int) ($album['proof_enabled'] ?? 0) === 1 && $count > 0 && album_has_feature($album, 'proof');
@@ -93,6 +97,7 @@ $data = [
     'allowDl' => $allowDl,
     'batch'   => max(1, (int) config('share_batch_files', 10)),
     'batchMb' => max(5, (int) config('share_batch_mb', 80)),
+    'sell'    => $sellOn ? ['photo' => $sellPhoto, 'all' => $sellAll, 'total' => $count] : null,
     'proof'   => $proofOn ? [
         'open'  => $proofOpen,
         'limit' => $pLimit,
@@ -124,7 +129,7 @@ $check = '<svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M
 <link href="<?= e($fonts) ?>" rel="stylesheet">
 <link rel="stylesheet" href="<?= e(asset('css/style.css')) ?>">
 </head>
-<body class="g g--<?= $style ?> <?= $allowDl ? '' : 'g--nodl' ?> <?= $proofOn ? 'g--proof mode-proof' : 'mode-save' ?>">
+<body class="g g--<?= $style ?> <?= $allowDl ? '' : 'g--nodl' ?> <?= $sellOn ? 'g--sell' : '' ?> <?= $proofOn ? 'g--proof mode-proof' : 'mode-save' ?>">
 
 <div class="inapp" id="inapp" hidden>
   <span>เพื่อบันทึกภาพลงเครื่องได้ แนะนำเปิดใน Safari / Chrome</span>
@@ -163,6 +168,13 @@ $check = '<svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M
       <h2 class="pg__title">ภาพทั้งหมด <span><?= $count ?></span></h2>
       <?php if ($album['description']): ?><p class="pg__desc"><?= nl2br(e($album['description'])) ?></p><?php endif; ?>
     </div>
+    <?php if ($sellOn): ?>
+    <aside class="pnote pnote--sell">
+      <p class="pnote__h"><span class="pnote__ic">฿</span> ภาพตัวอย่างมีลายน้ำ</p>
+      <p class="pnote__rule">ไฟล์ต้นฉบับไม่มีลายน้ำ ภาพละ <b>฿<?= e(money($sellPhoto)) ?></b><?= $sellAll > 0 ? ' · ซื้อทั้งหมด <b>฿' . e(money($sellAll)) . '</b>' : '' ?></p>
+      <p class="pnote__msg">เลือกภาพ ✓ แล้วกดซื้อ · ชำระผ่านพร้อมเพย์ แนบสลิป · ช่างภาพยืนยันแล้วโหลดได้ทันที</p>
+    </aside>
+    <?php endif; ?>
     <?php if ($proofOn): ?>
     <aside class="pnote <?= $proofOpen ? '' : 'pnote--closed' ?>">
       <p class="pnote__h"><span class="pnote__ic">♡</span> คัดรูปส่งให้ช่างภาพ</p>
@@ -188,7 +200,7 @@ $check = '<svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M
     <?php if ($proofOn && $allowDl): ?>
     <div class="modes" role="tablist" aria-label="โหมด">
       <button type="button" role="tab" data-mode="proof"><?= $heart ?> คัดรูป <span class="modes__n" id="pick-badge"></span></button>
-      <button type="button" role="tab" data-mode="save"><?= $check ?> บันทึกภาพ</button>
+      <button type="button" role="tab" data-mode="save"><?= $check ?> <?= $sellOn ? 'ซื้อ / บันทึกภาพ' : 'บันทึกภาพ' ?></button>
     </div>
     <?php else: ?>
     <p class="bar__hint"><?= $proofOn ? 'แตะ ♡ เพื่อคัดภาพที่ต้องการ' : 'แตะ ✓ เพื่อเลือกภาพที่ต้องการบันทึก' ?></p>
@@ -197,7 +209,9 @@ $check = '<svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M
       <span class="bar__links">
         <button type="button" class="link-btn save-only" id="sel-all">เลือกทั้งหมด</button>
         <?php if ($proofOn && $allowDl): ?><button type="button" class="link-btn save-only" id="sel-picks" hidden>เลือกภาพที่คัดไว้</button><?php endif; ?>
-        <?php if ($allowDl): ?><button type="button" class="link-btn save-only" id="zip-all">ดาวน์โหลดทั้งหมด</button><?php endif; ?>
+        <?php if ($sellOn && $sellAll > 0): ?><button type="button" class="link-btn save-only" id="buy-all">ซื้อทั้งหมด ฿<?= e(money($sellAll)) ?></button><?php endif; ?>
+        <?php if ($sellOn): ?><button type="button" class="link-btn" id="my-orders" hidden>คำสั่งซื้อของฉัน</button><?php endif; ?>
+        <?php if ($allowDl): ?><button type="button" class="link-btn save-only" id="zip-all" <?= $sellOn ? 'hidden' : '' ?>>ดาวน์โหลดทั้งหมด</button><?php endif; ?>
       </span>
       <div class="sizes" id="sizes" role="radiogroup" aria-label="ขนาดภาพ">
         <button type="button" role="radio" data-s="s" title="ภาพเล็ก"><i></i><i></i><i></i><i></i></button>
@@ -222,6 +236,7 @@ $check = '<svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M
         <img src="<?= e(media_url($img, 'thumb', $album['token'])) ?>" alt="ภาพที่ <?= $n + 1 ?>" loading="lazy" decoding="async">
         <span class="tile__no"><?= $n + 1 ?></span>
         <span class="tile__pick" aria-hidden="true"><?= $heart ?></span>
+        <?php if ($sellOn): ?><span class="tile__owned">ซื้อแล้ว</span><?php endif; ?>
         <?php if ($allowDl || $proofOn): ?>
         <button type="button" class="mark" aria-pressed="false" aria-label="เลือกภาพที่ <?= $n + 1 ?>"><?= $heart ?><?= $check ?></button>
         <?php endif; ?>
@@ -259,7 +274,51 @@ $check = '<svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M
   <input type="hidden" name="t" value="<?= e($album['token']) ?>">
   <input type="hidden" name="ids" value="">
   <input type="hidden" name="all" value="">
+  <input type="hidden" name="k" value="">
 </form>
+<?php endif; ?>
+
+<?php if ($sellOn): ?>
+<dialog class="dlg" id="buy-dlg">
+  <form method="dialog" class="dlg__form" id="buy-form">
+    <p class="dlg__eyebrow">ซื้อภาพ</p>
+    <h3 class="dlg__title">สั่งซื้อไฟล์ต้นฉบับ</h3>
+    <p class="dlg__sum" id="buy-sum"></p>
+    <label class="field"><span class="field__lbl">ชื่อของคุณ <em class="req">จำเป็น</em></span><input type="text" name="name" maxlength="120" required autocomplete="name"></label>
+    <label class="field"><span class="field__lbl">เบอร์โทร / LINE <em>ให้ช่างติดต่อกลับได้</em></span><input type="text" name="contact" maxlength="160" autocomplete="tel"></label>
+    <p class="dlg__err" id="buy-err" hidden></p>
+    <div class="dlg__btns">
+      <button type="button" class="cbtn" data-close>ยกเลิก</button>
+      <button type="submit" class="cbtn cbtn--solid" id="buy-go">ไปชำระเงิน</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dlg dlg--pay" id="pay-dlg">
+  <form method="dialog" class="dlg__form" id="pay-form" enctype="multipart/form-data">
+    <p class="dlg__eyebrow">ชำระเงิน · คำสั่งซื้อ #<span id="pay-no"></span></p>
+    <h3 class="dlg__title">฿<span id="pay-amount"></span></h3>
+    <div class="pay__qr" id="pay-qr"></div>
+    <p class="pay__to" id="pay-to"></p>
+    <p class="pay__note" id="pay-note"></p>
+    <label class="field"><span class="field__lbl">แนบสลิปการโอน <em class="req">จำเป็น</em></span><input type="file" name="slip" accept="image/*,application/pdf" required></label>
+    <p class="dlg__err" id="pay-err" hidden></p>
+    <div class="dlg__btns">
+      <button type="button" class="cbtn" data-close>ไว้ทีหลัง</button>
+      <button type="submit" class="cbtn cbtn--solid" id="pay-go">ส่งสลิป</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dlg" id="orders-dlg">
+  <div class="dlg__form">
+    <p class="dlg__eyebrow">คำสั่งซื้อของฉัน</p>
+    <h3 class="dlg__title">สถานะการซื้อภาพ</h3>
+    <ul class="myorders" id="myorders"></ul>
+    <div class="dlg__btns"><button type="button" class="cbtn" data-close>ปิด</button></div>
+  </div>
+</dialog>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <?php endif; ?>
 
 <?php if ($proofOn): ?>

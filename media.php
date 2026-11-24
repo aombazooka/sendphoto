@@ -46,6 +46,19 @@ if (!is_file($file)) {
     cache_store($img, $size, $got[0], $got[1]);
 }
 
+// Clients of a watermarked / selling gallery only ever receive watermarked previews.
+if ($token !== '' && watermark_on($album)) {
+    $wmSize = $size . '-wm' . watermark_version((int) $album['user_id']);
+    $wmFile = cache_path($img, $wmSize);
+    if (!is_file($wmFile)) {
+        $wm = apply_watermark((string) file_get_contents($file), (int) $album['user_id']);
+        if (!$wm) fail(500);
+        cache_store($img, $wmSize, $wm[0], $wm[1]);
+    }
+    $file = $wmFile;
+    $etag = '"' . basename($file) . '"';
+}
+
 if (trim((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? '')) === $etag) {
     http_response_code(304);
     exit;

@@ -120,6 +120,27 @@ switch ($action) {
         }
         redirect($back . '#proofs');
 
+    case 'order_approve':
+    case 'order_reject':
+    case 'order_revoke':
+        $oid = (int) ($_POST['order'] ?? 0);
+        $st = db()->prepare('SELECT * FROM orders WHERE id = ? AND album_id = ?');
+        $st->execute([$oid, $id]);
+        $order = $st->fetch();
+        if (!$order) { flash('ไม่พบคำสั่งซื้อ', 'err'); redirect($back . '#orders'); }
+        if ($action === 'order_approve') {
+            db()->prepare("UPDATE orders SET status = 'paid', paid_at = NOW() WHERE id = ?")->execute([$oid]);
+            flash('อนุมัติแล้ว — ' . $order['name'] . ' โหลดไฟล์ต้นฉบับได้ทันที');
+        } elseif ($action === 'order_reject') {
+            $reason = trim(mb_substr((string) ($_POST['reason'] ?? ''), 0, 200)) ?: 'สลิปไม่ถูกต้อง';
+            db()->prepare("UPDATE orders SET status = 'rejected', reject_reason = ? WHERE id = ?")->execute([$reason, $oid]);
+            flash('ไม่อนุมัติคำสั่งซื้อของ ' . $order['name'] . ' — ลูกค้าจะเห็นเหตุผลและแนบสลิปใหม่ได้', 'warn');
+        } else {
+            db()->prepare("UPDATE orders SET status = 'review', paid_at = NULL WHERE id = ?")->execute([$oid]);
+            flash('ยกเลิกการอนุมัติแล้ว', 'warn');
+        }
+        redirect($back . '#orders');
+
     case 'set_cover':
         $imgId = (int) ($_POST['image'] ?? 0);
         if (!find_image($id, $imgId)) json_out(['ok' => false], 404);

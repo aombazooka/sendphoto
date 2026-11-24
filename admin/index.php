@@ -5,6 +5,7 @@ require __DIR__ . '/../inc/admin_layout.php';
 $me = require_login();
 $uid = (int) $me['id'];
 $newProofs = unseen_proof_counts($uid);
+$toReview  = orders_to_review($uid);
 
 $q = trim((string) ($_GET['q'] ?? ''));
 $sql = 'SELECT a.*, (SELECT COUNT(*) FROM images i WHERE i.album_id = a.id AND i.hidden = 0) AS img_count FROM albums a WHERE a.user_id = ?';
@@ -97,6 +98,7 @@ admin_header('อัลบั้ม', 'albums');
           <?php endif; ?>
         </p>
         <?php if (!empty($newProofs[(int) $a['id']])): ?><a class="card__proof" href="<?= e(url('admin/album.php?id=' . $a['id'] . '#proofs')) ?>">♡ ลูกค้าส่งรายการคัดรูปใหม่ <?= $newProofs[(int) $a['id']] ?> รายการ</a><?php endif; ?>
+        <?php if (!empty($toReview[(int) $a['id']])): ?><a class="card__proof" href="<?= e(url('admin/album.php?id=' . $a['id'] . '#orders')) ?>">฿ มีสลิปรอตรวจ <?= $toReview[(int) $a['id']] ?> รายการ</a><?php endif; ?>
         <?php if ($a['sync_note']): ?><p class="card__warn">⚠ มีลิงก์ที่อ่านไม่ได้ เปิดแก้ไขเพื่อดูรายละเอียด</p><?php endif; ?>
         <div class="card__actions">
           <button type="button" class="btn btn--sm" data-copy="<?= e($link) ?>">คัดลอกลิงก์</button>
