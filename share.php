@@ -66,6 +66,7 @@ $count    = count($images);
 $bytes    = array_sum(array_map(fn($i) => (int) $i['size_bytes'], $images));
 $cover    = album_cover_url($album, true, 'preview');
 $logo     = album_logo_url($album);
+$faceOn   = face_on($album) && face_index_stats((int) $album['id'])['faces'] > 0;
 $sellOn   = sell_on($album);
 $sellPhoto = (float) ($album['sell_price_photo'] ?? 0);
 $sellAll  = (float) ($album['sell_price_all'] ?? 0);
@@ -97,6 +98,7 @@ $data = [
     'allowDl' => $allowDl,
     'batch'   => max(1, (int) config('share_batch_files', 10)),
     'batchMb' => max(5, (int) config('share_batch_mb', 80)),
+    'face'    => $faceOn,
     'sell'    => $sellOn ? ['photo' => $sellPhoto, 'all' => $sellAll, 'total' => $count] : null,
     'proof'   => $proofOn ? [
         'open'  => $proofOpen,
@@ -207,6 +209,7 @@ $check = '<svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M
     <?php endif; ?>
     <div class="bar__right">
       <span class="bar__links">
+        <?php if ($faceOn): ?><button type="button" class="link-btn link-btn--face" id="face-find">☺ หาภาพของฉัน</button><?php endif; ?>
         <button type="button" class="link-btn save-only" id="sel-all">เลือกทั้งหมด</button>
         <?php if ($proofOn && $allowDl): ?><button type="button" class="link-btn save-only" id="sel-picks" hidden>เลือกภาพที่คัดไว้</button><?php endif; ?>
         <?php if ($sellOn && $sellAll > 0): ?><button type="button" class="link-btn save-only" id="buy-all">ซื้อทั้งหมด ฿<?= e(money($sellAll)) ?></button><?php endif; ?>
@@ -225,6 +228,15 @@ $check = '<svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M
   <?php if (!$count): ?>
     <div class="empty"><div class="empty__mark">✦</div><p class="muted">ภาพกำลังจะมาเร็ว ๆ นี้</p></div>
   <?php else: ?>
+  <?php if ($faceOn): ?>
+  <div class="facebar" id="facebar" hidden>
+    <span id="fb-text"></span>
+    <span class="facebar__btns">
+      <button type="button" class="cbtn cbtn--sm cbtn--solid" id="fb-select">เลือกภาพเหล่านี้</button>
+      <button type="button" class="cbtn cbtn--sm" id="fb-clear">แสดงทุกภาพ</button>
+    </span>
+  </div>
+  <?php endif; ?>
   <div class="gw" id="grid" data-size="m">
     <?php foreach ($sections as $sk => $sec): ?>
     <section class="sec" id="sec-<?= $sk ?>">
@@ -337,6 +349,29 @@ $check = '<svg class="i-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M
     </div>
   </form>
 </dialog>
+<?php endif; ?>
+
+<?php if ($faceOn): ?>
+<dialog class="dlg" id="face-dlg">
+  <div class="dlg__form">
+    <p class="dlg__eyebrow">ค้นหาด้วยใบหน้า</p>
+    <h3 class="dlg__title">หาภาพที่มีคุณ</h3>
+    <p class="dlg__sum">ถ่ายเซลฟี่หรือเลือกภาพที่เห็นหน้าคุณชัด ๆ 1 ภาพ ระบบจะหาภาพในแกลเลอรีที่มีคุณให้</p>
+    <ul class="fd__facts">
+      <li>ภาพเซลฟี่ประมวลผลในเครื่องของคุณเท่านั้น <b>ไม่ถูกอัปโหลด</b> และไม่ถูกเก็บไว้</li>
+      <li>ส่งไปค้นหาเพียงค่าตัวเลขของใบหน้า และไม่ถูกบันทึก</li>
+      <li>ผลลัพธ์อาจไม่ครบหรือมีภาพของคนหน้าคล้าย ลองเลื่อนดูภาพทั้งหมดด้วย</li>
+    </ul>
+    <label class="check-inline fd__ok"><input type="checkbox" id="fd-ok"> ฉันยินยอมให้ใช้ภาพใบหน้าของฉันเพื่อค้นหาภาพในแกลเลอรีนี้</label>
+    <label class="cbtn cbtn--solid fd__pick">
+      <input type="file" id="fd-file" accept="image/*" capture="user" hidden> ถ่ายเซลฟี่ / เลือกภาพ
+    </label>
+    <p class="fd__status" id="fd-status"></p>
+    <p class="dlg__err" id="fd-err" hidden></p>
+    <div class="dlg__btns"><button type="button" class="cbtn" data-close>ปิด</button></div>
+  </div>
+</dialog>
+<script src="<?= e(asset('js/faces.js')) ?>"></script>
 <?php endif; ?>
 
 <div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="ดูภาพ">

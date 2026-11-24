@@ -217,6 +217,61 @@
     refresh().catch(() => show('เปิดไม่ได้ในเบราว์เซอร์นี้', false));
   }
 
+  /* ---------- face index (runs in this browser) ---------- */
+  const fx = $('.fx');
+  if (fx) {
+    const total = +fx.dataset.total;
+    const post = async (data) => {
+      const fd = new FormData();
+      fd.append('csrf', csrf);
+      fd.append('id', fx.dataset.album);
+      Object.entries(data).forEach(([k, v]) => fd.append(k, v));
+      const j = await (await fetch(base + 'admin/faces.php', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'fetch' } })).json();
+      if (!j.ok) throw new Error(j.error || 'บันทึกไม่สำเร็จ');
+      return j;
+    };
+    const runBtn = $('#fx-run');
+    let running = false;
+    runBtn?.addEventListener('click', async () => {
+      if (running) { running = false; return; }
+      running = true;
+      runBtn.textContent = 'หยุดชั่วคราว';
+      const msg = $('#fx-msg');
+      try {
+        msg.textContent = 'กำลังโหลดตัวจดจำใบหน้า (ครั้งแรกประมาณ 8 MB)…';
+        await window.SPFace.load();
+        const j = await (await fetch(base + 'admin/faces.php?id=' + fx.dataset.album, { headers: { 'X-Requested-With': 'fetch' } })).json();
+        let done = j.stats.done;
+        let faces = j.stats.faces;
+        for (const p of j.pending) {
+          if (!running) break;
+          let descs = [];
+          try {
+            const img = await window.SPFace.loadImg(p.src);
+            descs = (await window.SPFace.all(img)).map(window.SPFace.pack);
+          } catch { /* unreadable photo – mark it scanned with no faces */ }
+          await post({ action: 'save', image: p.id, descs: JSON.stringify(descs) });
+          done++;
+          faces += descs.length;
+          $('#fx-done').textContent = done;
+          $('#fx-faces').textContent = faces;
+          $('#fx-bar').style.width = Math.round(done / Math.max(1, total) * 100) + '%';
+          msg.textContent = `กำลังสแกน ${done}/${total} ภาพ… เปิดหน้านี้ค้างไว้จนเสร็จ`;
+        }
+        msg.textContent = done >= total ? `เสร็จแล้ว ✓ พบ ${faces} ใบหน้า — ลูกค้าใช้ “หาภาพของฉัน” ได้ทันที` : 'หยุดไว้แล้ว กดอีกครั้งเพื่อสแกนต่อ';
+      } catch (ex) {
+        msg.textContent = 'สแกนไม่สำเร็จ: ' + ex.message;
+      }
+      running = false;
+      runBtn.textContent = 'สแกนภาพที่เหลือ';
+    });
+    $('#fx-clear')?.addEventListener('click', async () => {
+      if (!confirm('ลบดัชนีใบหน้าทั้งหมดของแกลเลอรีนี้? (ภาพไม่ถูกลบ)')) return;
+      await post({ action: 'clear' });
+      location.reload();
+    });
+  }
+
   /* ---------- copy link ---------- */
   document.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-copy]');

@@ -35,7 +35,7 @@ $form = $album ?? [
     'event_date' => date('Y-m-d'), 'sources' => '', 'is_active' => 1, 'allow_download' => 1,
     'expires_at' => null, 'cover_file' => null, 'logo_file' => null, 'cover_style' => 'editorial',
     'proof_enabled' => 0, 'proof_limit' => 0, 'proof_extra_price' => 0, 'proof_deadline' => null, 'proof_message' => '',
-    'watermark_enabled' => 0, 'sell_enabled' => 0, 'sell_price_photo' => 0, 'sell_price_all' => 0,
+    'watermark_enabled' => 0, 'sell_enabled' => 0, 'sell_price_photo' => 0, 'sell_price_all' => 0, 'face_enabled' => 0,
 ];
 $expiryMode = $isNew ? '1y' : 'keep';
 
@@ -61,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'sell_enabled'   => isset($_POST['sell_enabled']) && has_feature($me, 'sell') ? 1 : 0,
         'sell_price_photo' => max(0, min(1000000, round((float) ($_POST['sell_price_photo'] ?? 0), 2))),
         'sell_price_all' => max(0, min(10000000, round((float) ($_POST['sell_price_all'] ?? 0), 2))),
+        'face_enabled'   => isset($_POST['face_enabled']) && has_feature($me, 'face') ? 1 : 0,
     ]);
     if ($form['sell_enabled'] && $form['sell_price_photo'] <= 0 && $form['sell_price_all'] <= 0) {
         $errors[] = 'เปิดขายภาพแล้ว กรุณาตั้งราคาต่อภาพ หรือราคาซื้อทั้งหมด';
@@ -122,22 +123,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  $form['sources'], $form['cover_file'], $form['logo_file'], $form['is_active'],
                  $form['allow_download'], $form['expires_at'], $form['cover_style'], $form['proof_enabled'],
                  $form['proof_limit'], $form['proof_extra_price'], $form['proof_deadline'], $form['proof_message'],
-                 $form['watermark_enabled'], $form['sell_enabled'], $form['sell_price_photo'], $form['sell_price_all']];
+                 $form['watermark_enabled'], $form['sell_enabled'], $form['sell_price_photo'], $form['sell_price_all'],
+                 $form['face_enabled']];
         $sourcesChanged = $isNew || $form['sources'] !== (string) $album['sources'];
 
         if ($isNew) {
             do { $token = new_token(); } while (find_album_by_token($token));
             db()->prepare('INSERT INTO albums(user_id, title, client, tagline, description, event_date, sources, cover_file, logo_file,
                            is_active, allow_download, expires_at, cover_style, proof_enabled, proof_limit, proof_extra_price,
-                           proof_deadline, proof_message, watermark_enabled, sell_enabled, sell_price_photo, sell_price_all, token)
-                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                           proof_deadline, proof_message, watermark_enabled, sell_enabled, sell_price_photo, sell_price_all, face_enabled, token)
+                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
                 ->execute([$uid, ...$vals, $token]);
             $id = (int) db()->lastInsertId();
         } else {
             db()->prepare('UPDATE albums SET title=?, client=?, tagline=?, description=?, event_date=?, sources=?, cover_file=?,
                            logo_file=?, is_active=?, allow_download=?, expires_at=?, cover_style=?, proof_enabled=?, proof_limit=?,
                            proof_extra_price=?, proof_deadline=?, proof_message=?, watermark_enabled=?, sell_enabled=?,
-                           sell_price_photo=?, sell_price_all=? WHERE id=? AND user_id=?')
+                           sell_price_photo=?, sell_price_all=?, face_enabled=? WHERE id=? AND user_id=?')
                 ->execute([...$vals, $id, $uid]);
         }
 
@@ -398,6 +400,22 @@ admin_header($isNew ? 'สร้างลิงก์แกลเลอรี' :
       <?php endif; ?>
     </section>
 
+    <section class="fset <?= (int) $form['face_enabled'] ? 'is-on' : '' ?>" id="face-set">
+      <div class="fset__hd">
+        <span class="field__lbl">☺ ค้นหาด้วยใบหน้า <em>ลูกค้าถ่ายเซลฟี่ แล้วระบบหาภาพที่มีตัวเองให้ (เหมาะกับงานอีเวนต์ รับปริญญา งานวิ่ง)</em></span>
+        <?php if (has_feature($me, 'face')): ?>
+        <label class="switch"><input type="checkbox" name="face_enabled" id="f-face" <?= (int) $form['face_enabled'] ? 'checked' : '' ?>><i></i> เปิดใช้</label>
+        <?php endif; ?>
+      </div>
+      <?php if (!has_feature($me, 'face')): ?><div class="fset__lock"><?= feature_locked_note('face') ?></div><?php else: ?>
+      <div class="fset__body">
+        <p class="hint"><b>PDPA:</b> ข้อมูลใบหน้าเป็นข้อมูลส่วนบุคคลที่อ่อนไหว ควรแจ้งผู้ร่วมงานว่ามีบริการนี้ และเปิดเฉพาะงานที่จำเป็น ·
+          ระบบเก็บเฉพาะ “ค่าตัวเลขของใบหน้า” ไม่ใช่ภาพ · เซลฟี่ของลูกค้าประมวลผลในมือถือของลูกค้าเท่านั้น ไม่ถูกอัปโหลด · ลบดัชนีได้ทุกเมื่อ</p>
+        <p class="hint">หลังบันทึก กด “สร้างดัชนีใบหน้า” ด้านล่างหน้านี้ (ทำในเบราว์เซอร์ของคุณ ใช้เวลาประมาณ 1–3 นาทีต่อ 300 ภาพ)</p>
+      </div>
+      <?php endif; ?>
+    </section>
+
     <div class="form__foot">
       <button class="btn btn--primary btn--wide" type="submit"><?= $isNew ? 'สร้างลิงก์แกลเลอรี' : 'บันทึกการเปลี่ยนแปลง' ?></button>
       <?php if (!$isNew): ?><button class="btn btn--danger-ghost" type="submit" form="del-form">ลบอัลบั้ม</button><?php endif; ?>
@@ -611,6 +629,26 @@ admin_header($isNew ? 'สร้างลิงก์แกลเลอรี' :
 </section>
 <?php endif; ?>
 
+<?php if (has_feature($me, 'face') && (int) $album['face_enabled']): $fs = face_index_stats((int) $album['id']); ?>
+<section class="panel" id="faces">
+  <div class="panel__head">
+    <div>
+      <p class="step">ค้นหาด้วยใบหน้า</p>
+      <h2 class="panel__title">ดัชนีใบหน้า</h2>
+    </div>
+    <p class="hint">สแกนแล้ว <b id="fx-done"><?= $fs['done'] ?></b> / <?= $fs['total'] ?> ภาพ · พบ <b id="fx-faces"><?= $fs['faces'] ?></b> ใบหน้า</p>
+  </div>
+  <div class="fx" data-album="<?= (int) $album['id'] ?>" data-total="<?= $fs['total'] ?>">
+    <div class="warm__bar"><i id="fx-bar" style="width: <?= $fs['total'] ? round($fs['done'] / $fs['total'] * 100) : 0 ?>%"></i></div>
+    <p class="hint" id="fx-msg"><?= $fs['done'] < $fs['total'] ? 'ยังมีภาพที่ยังไม่ได้สแกน — กด “สร้างดัชนีใบหน้า” แล้วเปิดหน้านี้ค้างไว้จนเสร็จ' : 'ดัชนีครบแล้ว ลูกค้าใช้ “หาภาพของฉัน” ได้ทันที' ?></p>
+    <div class="form__foot">
+      <button type="button" class="btn btn--primary" id="fx-run"><?= $fs['done'] ? 'สแกนภาพที่เหลือ' : 'สร้างดัชนีใบหน้า' ?></button>
+      <?php if ($fs['done']): ?><button type="button" class="btn btn--danger-ghost" id="fx-clear">ลบดัชนีใบหน้าทั้งหมด</button><?php endif; ?>
+    </div>
+  </div>
+</section>
+<?php endif; ?>
+
 <section class="panel">
   <div class="panel__head">
     <div>
@@ -641,5 +679,6 @@ admin_header($isNew ? 'สร้างลิงก์แกลเลอรี' :
 </section>
 <?php endif; ?>
 
+<?php if ($album && has_feature($me, 'face') && (int) $album['face_enabled']): ?><script src="<?= e(asset('js/faces.js')) ?>"></script><?php endif; ?>
 <div class="loading" id="loading" hidden><div class="loading__box"><span class="spinner"></span><p id="loading-text">กำลังทำงาน…</p></div></div>
 <?php admin_footer();

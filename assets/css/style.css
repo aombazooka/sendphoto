@@ -898,3 +898,19 @@ a.ntoast:hover { color: var(--ink); border-color: var(--brown); }
 .myorder--paid .myorder__st { background: rgba(95, 122, 85, .15); color: var(--ok); }
 .myorder--review .myorder__st { background: rgba(168, 120, 46, .15); color: var(--warn); }
 .myorder--rejected .myorder__st { background: rgba(162, 74, 60, .12); color: var(--err); }
+
+/* face search */
+.tile.is-out, .sec.is-out { display: none; }
+.link-btn--face { color: var(--ink); font-weight: 500; }
+.facebar { position: sticky; top: 64px; z-index: 15; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 0 6px 14px; padding: 10px 14px; border-radius: 14px; background: var(--brown); color: #fbf6ef; font-size: 14px; }
+.facebar b { font-weight: 600; }
+.facebar__btns { display: flex; gap: 6px; }
+.facebar .cbtn { color: #fbf6ef; border-color: rgba(251, 246, 239, .5); }
+.facebar .cbtn--solid { background: #fbf6ef; color: var(--ink); border-color: #fbf6ef; }
+.fd__facts { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+.fd__facts b { color: var(--ink); }
+.fd__ok { color: var(--ink); font-size: 13.5px; align-items: flex-start; }
+.fd__pick { cursor: pointer; justify-self: start; }
+.fd__status { margin: 0; font-size: 13px; color: var(--brown); }
+.fd__status:empty { display: none; }
+.fx { display: grid; gap: 10px; }

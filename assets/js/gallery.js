@@ -755,6 +755,67 @@
   });
   window.addEventListener('focus', loadOrders);
 
+  /* ---------- find my photos (face search) ---------- */
+  const fdlg = $('#face-dlg');
+  if (fdlg) {
+    const err = (m) => { const e = $('#fd-err'); e.textContent = m; e.hidden = !m; };
+    let found = null;
+    const applyFace = (ids) => {
+      found = ids;
+      const set = new Set(ids || []);
+      $$('.tile').forEach((t) => t.classList.toggle('is-out', !!ids && !set.has(+t.dataset.id)));
+      $$('.sec').forEach((s) => s.classList.toggle('is-out', !!ids && !s.querySelector('.tile:not(.is-out)')));
+      const bar = $('#facebar');
+      bar.hidden = !ids;
+      if (ids) {
+        $('#fb-text').innerHTML = ids.length ? `☺ พบ <b>${ids.length}</b> ภาพที่น่าจะมีคุณ` : '☺ ไม่พบภาพที่ตรงกับใบหน้าของคุณ ลองใช้ภาพที่เห็นหน้าชัดกว่านี้';
+        $('#fb-select').hidden = !ids.length;
+        window.scrollTo({ top: $('#photos').offsetTop, behavior: 'smooth' });
+      }
+    };
+    $('#face-find').addEventListener('click', () => { err(''); fdlg.showModal(); });
+    $('#fd-ok').addEventListener('change', () => err(''));
+    $('.fd__pick').addEventListener('click', (e) => {
+      if (!$('#fd-ok').checked) { e.preventDefault(); err('กรุณาติ๊กยินยอมก่อนค้นหา'); }
+    });
+    const input = $('#fd-file');
+    input.addEventListener('change', async () => {
+      const file = input.files[0];
+      if (!file) return;
+      const st = $('#fd-status');
+      err('');
+      try {
+        st.textContent = 'กำลังโหลดตัวจดจำใบหน้า… (ครั้งแรกประมาณ 8 MB)';
+        await window.SPFace.load();
+        st.textContent = 'กำลังหาใบหน้าในภาพของคุณ…';
+        const url = URL.createObjectURL(file);
+        const img = await window.SPFace.loadImg(url);
+        const d = await window.SPFace.one(img);
+        URL.revokeObjectURL(url);
+        if (!d) throw new Error('ไม่พบใบหน้าในภาพ ลองถ่ายใหม่ให้เห็นหน้าชัด ๆ แสงพอ ไม่ใส่แว่นดำ');
+        st.textContent = 'กำลังค้นหาในแกลเลอรี…';
+        const fd = new FormData();
+        fd.append('t', G.token);
+        fd.append('d', window.SPFace.pack(d));
+        const j = await (await fetch(G.base + 'face.php', { method: 'POST', body: fd })).json();
+        if (!j.ok) throw new Error(j.error || 'ค้นหาไม่สำเร็จ');
+        fdlg.close();
+        applyFace(j.ids);
+      } catch (ex) {
+        err(ex.message);
+      }
+      st.textContent = '';
+      input.value = '';
+    });
+    $('#fb-clear').addEventListener('click', () => applyFace(null));
+    $('#fb-select').addEventListener('click', () => {
+      if (!found) return;
+      found.forEach((id) => (mode === 'proof' ? picks : saves).add(id));
+      prepared = null; persist(); paintAll(); render();
+      toast(`เลือก ${found.length} ภาพแล้ว`);
+    });
+  }
+
   setMode(mode);
   loadProof();
   loadOrders();
